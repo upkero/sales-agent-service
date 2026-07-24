@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      # This repo owns no database. Its two data sources both live outside this
+      # compose file, so they are reached over the host, not a compose network:
+      #   - ops-core-api runs from its own compose file (the price list),
+      #   - the LLM is a local Ollama or a hosted provider.
+      # host.docker.internal is the host as seen from a container on Docker
+      # Desktop; on plain Linux the extra_hosts line below makes it resolve too.
+      CORE_API_BASE_URL: ${CORE_API_BASE_URL:-http://host.docker.internal:8000}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8001:8000"

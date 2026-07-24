@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    # No services: this repo owns no database. Its only data sources are
+    # ops-core-api and an LLM over HTTP, both replaced by in-memory fakes in the
+    # tests, so the whole suite runs offline.
+    env:
+      # Settings are read at import time, and a required key with no value would
+      # fail collection before any test runs. Throwaway CI values.
+      CORE_API_API_KEY: ci-placeholder-key-not-a-secret
+      LLM_MODEL: ci-stub-model
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type check
+        run: uv run mypy src
+
+      - name: Test
+        run: uv run pytest --cov=src/app/services --cov-report=term-missing --cov-fail-under=60
