@@ -145,9 +145,11 @@ up:
   an agent talks over its own offer.
 - **Money is `Decimal` end to end.** Prices arrive from `ops-core-api` as strings
   and stay exact; they are never floated.
-- **No database.** Conversation state lives in-process behind a `ConversationRepository`
-  port, which is the seam a Postgres/Redis store would slot into unchanged. The
-  container pins one worker to match.
+- **No database, but a bounded store.** Conversation state lives in-process behind a
+  `ConversationRepository` port — the seam a Postgres/Redis store would slot into
+  unchanged. It cannot leak: conversations expire after a TTL of inactivity and a
+  hard cap evicts the least-recently-active (lazy on read, swept on write, no
+  background timer). The container pins one worker to match.
 
 ---
 
@@ -215,5 +217,7 @@ uv run mypy src
   один раз переспрашивает, а затем — ограниченно — эскалирует на человека
   (`handoff: true`), не зацикливаясь.
 - Деньги — `Decimal` от начала до конца, без float.
-- БД нет: состояние диалога живёт в памяти за портом `ConversationRepository` —
-  это готовый шов для замены на Postgres/Redis.
+- БД нет, но стор **ограничен**: состояние диалога живёт в памяти за портом
+  `ConversationRepository` (готовый шов для замены на Postgres/Redis). Утечки нет —
+  диалоги истекают по TTL неактивности, а жёсткий лимит вытесняет наименее
+  недавно активный (лениво при чтении, свип при записи, без фонового таймера).

@@ -138,7 +138,7 @@ class _RogueStage(DialogueStage):
 
 async def test_an_illegal_transition_is_a_typed_error_not_a_crash(agent_settings) -> None:
     service = SalesService(
-        InMemoryConversationRepository(),
+        InMemoryConversationRepository(ttl_seconds=3600.0, max_entries=100),
         {SalesStage.GREETING: _RogueStage(StubLLM(control("hi")), agent_settings)},
     )
 

@@ -14,6 +14,7 @@ from functools import cached_property
 
 from src.app.contracts.sales import SalesStage
 from src.app.core.settings.agent import get_agent_settings
+from src.app.core.settings.conversation import get_conversation_store_settings
 from src.app.core.settings.core_api import get_core_api_settings
 from src.app.core.settings.llm import get_llm_settings
 from src.app.interfaces.conversation_repository import ConversationRepository
@@ -44,7 +45,11 @@ class ApplicationContainer:
 
     @cached_property
     def conversation_repository(self) -> ConversationRepository:
-        return InMemoryConversationRepository()
+        settings = get_conversation_store_settings()
+        return InMemoryConversationRepository(
+            ttl_seconds=settings.ttl_seconds,
+            max_entries=settings.max_entries,
+        )
 
     @cached_property
     def sales_tactic(self) -> SalesTactic:
