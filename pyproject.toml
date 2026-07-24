@@ -1,0 +1,42 @@
+[project]
+name = "sales-agent-service"
+version = "0.1.0"
+description = "Selling dialogue agent with an explicit state machine, pricing offers computed from ops-core-api"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.115.0",
+    "pydantic-settings>=2.7.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.0",
+    "tenacity>=9.0.0",
+    "openai>=1.60.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+    "mypy>=1.14.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+explicit_package_bases = true
+# Teaches mypy that pydantic models synthesise their __init__, so settings
+# classes with required fields are not reported as missing arguments.
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

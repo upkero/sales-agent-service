@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Unit test / coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.pytest_cache/
+
+# Type / lint caches
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+# uv.lock is committed on purpose: CI runs `uv sync --frozen` for reproducible builds.
+
+# IDEs
+.idea/
+.vscode/
+
+# Agent tooling
+.codex
+.agents
+CLAUDE.md
+.claude/
