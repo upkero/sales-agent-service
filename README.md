@@ -157,6 +157,10 @@ up:
   hard cap evicts the least-recently-active (lazy on read, swept on write, no
   background timer). The container pins one worker to match.
 
+## License
+
+[MIT](LICENSE) © 2026 upkero.
+
 ---
 
 # Sales Agent Service (Русский)
