@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from httpx import ASGITransport, AsyncClient
 
+from src.app.core.settings.app import get_app_settings
 from src.main import create_app
 from tests.fakes import FakePricingGateway, StubLLM, build_container, control
 
@@ -81,3 +82,55 @@ async def test_the_request_id_is_echoed() -> None:
         response = await client.post(TURN, json={"message": "hello"}, headers={"X-Request-ID": "abc-123"})
 
     assert response.headers["X-Request-ID"] == "abc-123"
+
+
+async def test_the_turn_endpoint_is_rate_limited() -> None:
+    """It drives a paid LLM call per request, so it stays bounded (5/min in tests)."""
+    async with _client(control("hi")) as client:  # str script: same reply every call
+        statuses = [(await client.post(TURN, json={"message": "hi"})).status_code for _ in range(6)]
+
+    assert statuses.count(200) == 5
+    assert statuses[-1] == 429
+
+
+async def test_a_rate_limited_response_says_when_to_retry() -> None:
+    async with _client(control("hi")) as client:
+        for _ in range(6):
+            response = await client.post(TURN, json={"message": "hi"})
+
+    assert response.status_code == 429
+    assert response.json()["error_code"] == "rate_limit_exceeded"
+    assert "Retry-After" in response.headers
+
+
+async def test_health_is_never_rate_limited() -> None:
+    """The container runtime polls it; throttling it would restart a healthy service."""
+    async with _client(control("hi")) as client:
+        statuses = [(await client.get("/health/live")).status_code for _ in range(20)]
+
+    assert set(statuses) == {200}
+
+
+async def test_the_turn_endpoint_is_open_when_no_key_is_configured() -> None:
+    # The default in the test env: no INBOUND_API_KEY, so no header is needed.
+    async with _client([control("hi")]) as client:
+        response = await client.post(TURN, json={"message": "hello"})
+
+    assert response.status_code == 200
+
+
+async def test_inbound_auth_is_enforced_when_a_key_is_configured(monkeypatch) -> None:
+    monkeypatch.setenv("INBOUND_API_KEY", "s3cret-inbound-key-value")
+    get_app_settings.cache_clear()  # settings are cached; rebuild them with the key set
+    try:
+        async with _client(control("hi")) as client:
+            missing = await client.post(TURN, json={"message": "hi"})
+            wrong = await client.post(TURN, json={"message": "hi"}, headers={"X-API-Key": "nope"})
+            right = await client.post(TURN, json={"message": "hi"}, headers={"X-API-Key": "s3cret-inbound-key-value"})
+
+        assert missing.status_code == 401
+        assert missing.json()["error_code"] == "unauthorized"
+        assert wrong.status_code == 401
+        assert right.status_code == 200
+    finally:
+        get_app_settings.cache_clear()  # leave settings clean for other tests

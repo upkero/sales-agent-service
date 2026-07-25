@@ -25,6 +25,16 @@ def _error_response(
     )
 
 
+def error_response_from_exception(exc: BaseAppException, headers: Mapping[str, str] | None = None) -> JSONResponse:
+    """Render an app exception as the uniform envelope.
+
+    Exposed for the rate-limit middleware: exception handlers live *inside* the
+    middleware stack, so a raise from a middleware escapes them and becomes a raw
+    500. The middleware returns this instead of raising.
+    """
+    return _error_response(exc.status_code, exc.detail, exc.error_code, headers)
+
+
 async def handle_app_exception(request: Request, exc: BaseAppException) -> JSONResponse:
     # 5xx are our faults and are logged with a stacktrace; 4xx are the caller's
     # and stay quiet. Either way the caller gets the same typed envelope, never

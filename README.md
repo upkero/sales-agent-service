@@ -129,6 +129,12 @@ HTTP test that drives the real app through `httpx.AsyncClient`. Coverage on the
 A few decisions worth calling out, because they are where "production-grade" shows
 up:
 
+- **The paid endpoint is protected.** Every turn drives an LLM call, so
+  `POST /sales-agent/turn` is **rate-limited per client IP** (429 + `Retry-After`
+  when exceeded) and can require an **inbound API key** (`X-API-Key`). The key is
+  optional — unset, the endpoint is open so the demo runs with no ceremony; set
+  `INBOUND_API_KEY` and it is enforced with a constant-time comparison. Health
+  probes are never rate-limited.
 - **The one-jump guard is enforced, not asserted.** Legal moves are a table in
   `contracts/sales.py`; the orchestrator rejects anything outside it by raising a
   *typed* `InvalidStageTransitionError`, which the exception handler renders as the
@@ -210,6 +216,11 @@ uv run mypy src
 апселла и HTTP-тест через `httpx.AsyncClient`. Покрытие слоя `services/` — около 96%.
 
 ### Заметки по проду
+- Платный эндпоинт защищён: `POST /sales-agent/turn` **ограничен по частоте на IP**
+  (429 + `Retry-After`) и может требовать **входной API-ключ** (`X-API-Key`). Ключ
+  опционален — без `INBOUND_API_KEY` эндпоинт открыт (чтобы демо запускалось без
+  церемоний), с ним — обязателен, сравнение константного времени. Health-пробы не
+  лимитируются.
 - Инвариант «не более одного прыжка» **обеспечивается**, а не проверяется через
   `assert`: нелегальный переход поднимает типизированное
   `InvalidStageTransitionError` (единый JSON-envelope), а не роняет 500 со стектрейсом.

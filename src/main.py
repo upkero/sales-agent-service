@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.app.api.v1.exception_handlers import register_exception_handlers
+from src.app.api.v1.middleware.rate_limit import register_rate_limiting
 from src.app.api.v1.middleware.request_id import register_request_id_middleware
 from src.app.api.v1.router import api_router
 from src.app.api.v1.routers.health import router as health_router
@@ -51,7 +52,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Order matters: rate limiting is registered last so it runs first (outermost),
+    # and a flood is rejected before anything else does work on it.
     register_request_id_middleware(app)
+    register_rate_limiting(app)
     register_exception_handlers(app)
 
     app.include_router(health_router)

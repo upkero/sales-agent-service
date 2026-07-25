@@ -1,12 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from src.app.api.v1.dependencies import SalesServiceDep
+from src.app.api.v1.dependencies.security import require_api_key
 from src.app.schemas.sales import TurnRequest, TurnResponse
 
 router = APIRouter(prefix="/sales-agent", tags=["sales-agent"])
 
 
-@router.post("/turn", response_model=TurnResponse)
+# require_api_key gates the route when a key is configured (a no-op otherwise);
+# the per-IP rate limit is enforced ahead of it, in middleware.
+@router.post("/turn", response_model=TurnResponse, dependencies=[Depends(require_api_key)])
 async def take_turn(body: TurnRequest, service: SalesServiceDep) -> TurnResponse:
     """Advance the conversation by one turn.
 
