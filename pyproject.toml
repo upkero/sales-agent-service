@@ -2,6 +2,10 @@
 name = "sales-agent-service"
 version = "0.1.0"
 description = "Selling dialogue agent with an explicit state machine, pricing offers computed from ops-core-api"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "upkero" }]
+keywords = ["fastapi", "llm", "sales-agent", "state-machine", "template-method"]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.115.0",

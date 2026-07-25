@@ -1,5 +1,9 @@
 # Sales Agent Service
 
+[![CI](https://github.com/upkero/sales-agent-service/actions/workflows/ci.yml/badge.svg)](https://github.com/upkero/sales-agent-service/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+
 A production-shaped **selling dialogue agent** built around an *explicit* state
 machine. The conversation moves through a sales funnel —
 `greeting → qualify → present → objection_handling → upsell → close` — and when it
