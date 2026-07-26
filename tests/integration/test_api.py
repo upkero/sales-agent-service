@@ -12,16 +12,17 @@ from contextlib import asynccontextmanager
 from httpx import ASGITransport, AsyncClient
 
 from src.app.core.settings.app import get_app_settings
+from src.app.interfaces.pricing_gateway import PricingGateway
 from src.main import create_app
-from tests.fakes import FakePricingGateway, StubLLM, build_container, control
+from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, build_container, control
 
 TURN = "/api/v1/sales-agent/turn"
 
 
 @asynccontextmanager
-async def _client(script: str | list[str]) -> AsyncIterator[AsyncClient]:
+async def _client(script: str | list[str], pricing: PricingGateway | None = None) -> AsyncIterator[AsyncClient]:
     app = create_app()
-    app.state.container = build_container(StubLLM(script), FakePricingGateway())
+    app.state.container = build_container(StubLLM(script), pricing or FakePricingGateway())
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         yield client
 
@@ -32,6 +33,23 @@ async def test_liveness_is_open_and_cheap() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+async def test_readiness_is_ok_when_dependencies_are_up() -> None:
+    async with _client(control("hi")) as client:  # fake LLM and pricing both ping True
+        response = await client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+async def test_readiness_fails_when_ops_core_is_unreachable() -> None:
+    # The price source is a readiness dependency: down means not ready.
+    async with _client(control("hi"), pricing=UnavailablePricingGateway()) as client:
+        response = await client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert "ops-core-api" in response.json()["detail"]
 
 
 async def test_a_first_turn_returns_the_envelope_and_advances_the_stage() -> None:

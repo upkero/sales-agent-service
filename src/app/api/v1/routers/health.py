@@ -1,6 +1,8 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 
-from src.app.api.v1.dependencies import LLMClientDep
+from src.app.api.v1.dependencies import LLMClientDep, PricingGatewayDep
 
 router = APIRouter(prefix="/health", tags=["infra"])
 
@@ -13,13 +15,17 @@ async def liveness() -> dict[str, str]:
 
 
 @router.get("/ready")
-async def readiness(llm_client: LLMClientDep) -> dict[str, str]:
-    """Can this process do its job.
+async def readiness(llm_client: LLMClientDep, pricing: PricingGatewayDep) -> dict[str, str]:
+    """Can this process actually do its job.
 
-    Its job is holding a conversation, which it cannot do without the language
-    model, so an unreachable model means not ready. ops-core-api is deliberately
-    not probed here: a pricing outage degrades one stage, not the whole agent.
+    Its job is to hold a selling conversation and quote a real price, which needs
+    two things reachable: the language model and ops-core-api (the price source).
+    Either one down means the agent cannot complete its core task, so readiness
+    fails and the orchestrator keeps traffic away until it recovers. The two checks
+    run concurrently — a readiness probe should be cheap and prompt.
     """
-    if not await llm_client.ping():
-        raise HTTPException(status_code=503, detail="LLM unavailable")
+    llm_ok, core_ok = await asyncio.gather(llm_client.ping(), pricing.ping())
+    down = [name for name, ok in (("llm", llm_ok), ("ops-core-api", core_ok)) if not ok]
+    if down:
+        raise HTTPException(status_code=503, detail=f"dependencies unavailable: {', '.join(down)}")
     return {"status": "ok"}

@@ -68,6 +68,16 @@ class CoreApiPricingGateway(PricingGateway):
         )
         return [self._to_item(item) for item in payload.get("items", [])]
 
+    async def ping(self) -> bool:
+        # ops-core-api exposes an open GET /health. Deliberately no retry policy:
+        # a readiness probe must report the state *now*, not after backing off, and
+        # it must never raise — an unreachable dependency is a False, not a 500.
+        try:
+            response = await self._client.get("/health")
+        except httpx.HTTPError:
+            return False
+        return response.status_code < 400
+
     async def close(self) -> None:
         await self._client.aclose()
 

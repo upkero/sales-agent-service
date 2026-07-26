@@ -76,6 +76,9 @@ class FakePricingGateway(PricingGateway):
         self.calls.append(("list_services",))
         return [PricingItem(service_name=name, unit_price=price) for name, price in self._catalogue.items()]
 
+    async def ping(self) -> bool:
+        return True
+
     def _lookup(self, service: str) -> tuple[str, Decimal]:
         for name, price in self._catalogue.items():
             if name.lower() == service.lower():  # ops-core-api matches case-insensitively
@@ -91,6 +94,9 @@ class UnavailablePricingGateway(PricingGateway):
 
     async def list_services(self) -> Sequence[PricingItem]:
         raise PricingUnavailableError()
+
+    async def ping(self) -> bool:
+        return False  # models an unreachable ops-core-api
 
 
 class StubLLM(LLMClient):

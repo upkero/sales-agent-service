@@ -27,3 +27,9 @@ class PricingGateway(ABC):
     async def list_services(self) -> Sequence[PricingItem]:
         """The sellable catalogue, used to ground the agent in real offerings and
         to recover when a prospect names a service that does not exist."""
+
+    @abstractmethod
+    async def ping(self) -> bool:
+        """Is the price source reachable right now? A cheap, unauthenticated,
+        no-retry liveness check for the readiness probe — True if up, False if not,
+        never raising."""
