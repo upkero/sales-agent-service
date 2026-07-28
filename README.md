@@ -8,15 +8,12 @@ A production-shaped **selling dialogue agent** built around an *explicit* state
 machine. The conversation moves through a sales funnel —
 `greeting → qualify → present → objection_handling → upsell → close` — and when it
 comes time to make an offer, the agent fetches the real price from
-[`ops-core-api`](../ops-core-api) so the number the customer hears is the one the
-business would actually charge, volume discount and all.
+[`ops-core-api`](https://github.com/upkero/ops-core-api) so the number the customer
+hears is the one the business would actually charge, volume discount and all.
 
 The point of the project is the *shape* of the code, not the size of it: a clean
 layered architecture, SOLID seams you can point at, and a state machine driven by
 the **Template Method** pattern rather than a pile of `if/elif`.
-
-> Part of a five-service portfolio; all services share the layered architecture in
-> [`docs/architecture.md`](docs/architecture.md).
 
 ## The state machine
 
@@ -45,32 +42,56 @@ objection, the machine skips objection handling. That is the single permitted
 ## Architecture
 
 Strict layered architecture with a one-way dependency rule (outer depends on
-inner, never the reverse): `api → services → interfaces ← repositories / llm`,
-over a base of `contracts`, `core` and `exceptions`. Full diagram and layer
-responsibilities in [`docs/architecture.md`](docs/architecture.md).
+inner, never the reverse):
+
+```
+api/  →  services/  →  interfaces/  ←  gateways/ · repositories/ · llm/
+                over contracts/ · core/ · exceptions/
+```
+
+- **`api/`** — HTTP only: routing, schemas, middleware, error rendering. It never
+  sees a prompt or a price.
+- **`services/`** — the dialogue itself: the stage machine and the orchestrator.
+- **`interfaces/`** — the ports (ABCs) the services depend on.
+- **`gateways/`** vs **`repositories/`** — a gateway is somebody else's service
+  over the network (`gateways/core_api_pricing.py`); a repository is a store this
+  service owns (`repositories/memory_conversation.py`, in memory today, a Postgres
+  table the day a conversation has to survive a restart). Both directories exist
+  here on purpose — that is the rule working, not an oversight.
+- **`prompts/`** — every model-facing text, as Markdown, in English, with the
+  reply language as a `{reply_language}` placeholder. **`messages/`** — the lines
+  the customer reads verbatim, one entry per language. Nothing the model reads
+  lives in an f-string next to the code that sends it.
+- **`contracts/` · `core/` · `exceptions/`** — the base every layer may import.
 
 Patterns you can point at (each is commented in the code as a teaching example):
 
 | Pattern | Where | Why |
 |---|---|---|
 | **Template Method** | `services/dialog/stages/base.py` | Fixed turn skeleton; stages override only their directive and transition |
-| **Adapter** | `repositories/core_api_pricing.py` | An HTTP client that satisfies a port shaped like a plain data repository |
+| **Adapter** | `gateways/core_api_pricing.py` | An HTTP client that satisfies a port shaped like a plain data repository |
 | **Repository** | `interfaces/conversation_repository.py` + `repositories/memory_conversation.py` | Conversation storage behind an abstraction, swappable for a DB later |
 | **Strategy** | `services/sales/tactics.py` | Interchangeable rule for *what* to upsell |
-| **Factory** | `llm/factory.py`, `repositories/core_api_pricing.py` | The one place each external client is constructed |
+| **Factory** | `llm/factory.py`, `gateways/core_api_pricing.py` | The one place each external client is constructed |
 | **Dependency Inversion** | everywhere in `services/` | Services depend on `interfaces/` (ABCs), not concrete classes |
 
 ## Quickstart
 
 ### Run with Docker
 
-You need a running [`ops-core-api`](../ops-core-api) (the price list) and an LLM
-endpoint (a local [Ollama](https://ollama.com) is the zero-cost default).
+You need a running [`ops-core-api`](https://github.com/upkero/ops-core-api) (the
+price list) and an LLM endpoint (a local [Ollama](https://ollama.com) is the
+zero-cost default).
 
 ```bash
 cp .env.example .env          # set OPS_CORE_API_KEY to your ops-core-api key
-docker compose up --build     # serves on http://localhost:8001
+docker compose up --build     # serves on http://localhost:8002
 ```
+
+`.env.example` ships with `OPS_CORE_API_KEY="change-me-min-16-chars"`. That exact
+placeholder is shared by all five services in the portfolio, so `cp .env.example
+.env` gives a working local demo out of the box — and it is rotated in all five at
+once, never in one.
 
 ### Run locally with uv
 
@@ -82,12 +103,12 @@ uv run uvicorn src.main:app --reload      # http://localhost:8000
 
 ### Talk to it
 
-The endpoint is `POST /api/v1/sales-agent/turn`. Omit `conversation_id` on the
-first turn; pass the id you get back to continue.
+The endpoint is `POST /api/v1/turn`. Omit `conversation_id` on the first turn;
+pass the id you get back to continue.
 
 ```bash
 # First turn — the agent greets and the stage advances to "qualify"
-curl -s localhost:8000/api/v1/sales-agent/turn \
+curl -s localhost:8000/api/v1/turn \
   -H 'Content-Type: application/json' \
   -d '{"message": "hi, I keep getting knots in my shoulders"}'
 ```
@@ -104,7 +125,7 @@ curl -s localhost:8000/api/v1/sales-agent/turn \
 
 ```bash
 # Continue — reuse the conversation_id you were given
-curl -s localhost:8000/api/v1/sales-agent/turn \
+curl -s localhost:8000/api/v1/turn \
   -H 'Content-Type: application/json' \
   -d '{"message": "maybe three deep tissue massages", "conversation_id": "0b0f…"}'
 ```
@@ -119,14 +140,17 @@ at `close`; `handoff` turns true if the agent escalates to a human (see below).
 ```bash
 uv run pytest --cov=src/app/services --cov-report=term-missing --cov-fail-under=60
 uv run ruff check .
-uv run mypy src
+uv run mypy .
 ```
 
 Every `DialogueStage` is unit-tested in isolation with a **stubbed LLM** (no
 network, deterministic), plus a full-funnel test that walks greeting → priced
 upsell and asserts the upsell total equals `ops-core-api`'s own arithmetic, and an
 HTTP test that drives the real app through `httpx.AsyncClient`. Coverage on the
-`services/` layer (the business logic) sits around 96%.
+`services/` layer (the business logic) sits around 98%. Two contracts are also
+pinned by tests rather than by convention: every prompt renders with the values
+its stage actually supplies, and every `error_code` the pricing gateway maps still
+exists in `ops-core-api`'s published list (`tests/fixtures/error-codes.json`).
 
 ## Design notes
 
@@ -134,11 +158,19 @@ A few decisions worth calling out, because they are where "production-grade" sho
 up:
 
 - **The paid endpoint is protected.** Every turn drives an LLM call, so
-  `POST /sales-agent/turn` is **rate-limited per client IP** (429 + `Retry-After`
+  `POST /api/v1/turn` is **rate-limited per client IP** (429 + `Retry-After`
   when exceeded) and can require an **inbound API key** (`X-API-Key`). The key is
   optional — unset, the endpoint is open so the demo runs with no ceremony; set
   `INBOUND_API_KEY` and it is enforced with a constant-time comparison. Health
   probes are never rate-limited.
+- **CORS is closed until you open it.** `CORS_ALLOWED_ORIGINS` defaults to *empty*,
+  not `*`. The `curl` examples above work regardless, but **a browser frontend
+  cannot call this service until its origin is listed** — set it in `.env` (CSV,
+  e.g. `http://localhost:5173`) or the first thing a consumer meets is a CORS
+  error in the console. Credentials are explicitly disallowed: the API key travels
+  in a header, never a cookie. CORS is also the **outermost** middleware, so a 429
+  from the rate limiter still carries CORS headers instead of reaching the browser
+  as an opaque "Failed to fetch".
 - **The one-jump guard is enforced, not asserted.** Legal moves are a table in
   `contracts/sales.py`; the orchestrator rejects anything outside it by raising a
   *typed* `InvalidStageTransitionError`, which the exception handler renders as the
@@ -172,7 +204,8 @@ up:
 Продающий диалоговый агент с **явной стейт-машиной**. Диалог идёт по воронке —
 `greeting → qualify → present → objection_handling → upsell → close`, а в момент
 формирования предложения агент берёт актуальную цену из
-[`ops-core-api`](../ops-core-api) (`GET /pricing`), включая объёмную скидку, — то
+[`ops-core-api`](https://github.com/upkero/ops-core-api) (`GET /pricing`),
+включая объёмную скидку, — то
 есть называет ту цену, которую бизнес реально выставил бы.
 
 Смысл проекта — в *форме* кода: чистая слоистая архитектура, явные SOLID-швы и
@@ -188,17 +221,26 @@ up:
 
 ### Архитектура
 Строгая слоистая архитектура с однонаправленной зависимостью (внешние слои зависят
-от внутренних). Диаграмма и ответственность слоёв — в
-[`docs/architecture.md`](docs/architecture.md). Применённые паттерны (каждый
-прокомментирован в коде как обучающий пример): Template Method, Adapter, Repository,
-Strategy, Factory, Dependency Inversion.
+от внутренних): `api/ → services/ → interfaces/ ← gateways/ · repositories/ · llm/`
+поверх `contracts/ · core/ · exceptions/`. Диаграмма и ответственность слоёв — в
+английской части выше. `gateways/` — чужой сервис по сети, `repositories/` — стор,
+которым владеет этот сервис; здесь есть оба, и это правило в действии, а не
+недосмотр. Весь текст для модели — в `prompts/` (Markdown, английский, язык ответа
+через плейсхолдер `{reply_language}`); строки, которые клиент читает дословно, — в
+`messages/`. Применённые паттерны (каждый прокомментирован в коде как обучающий
+пример): Template Method, Adapter, Repository, Strategy, Factory, Dependency
+Inversion.
 
 ### Запуск
 
 ```bash
 cp .env.example .env          # укажите OPS_CORE_API_KEY от вашего ops-core-api
-docker compose up --build     # http://localhost:8001
+docker compose up --build     # http://localhost:8002
 ```
+
+В `.env.example` лежит `OPS_CORE_API_KEY="change-me-min-16-chars"` — этот
+плейсхолдер одинаков во всех пяти сервисах портфолио (поэтому `cp .env.example
+.env` сразу даёт рабочее демо) и ротируется сразу во всех пяти, а не в одном.
 
 Локально:
 
@@ -207,28 +249,37 @@ uv sync
 uv run uvicorn src.main:app --reload
 ```
 
-Эндпоинт — `POST /api/v1/sales-agent/turn`. На первом ходе `conversation_id` не
-указывается; полученный id передаётся дальше, чтобы продолжить диалог. Пример
-запроса и ответа — в английской части выше.
+Эндпоинт — `POST /api/v1/turn`. На первом ходе `conversation_id` не указывается;
+полученный id передаётся дальше, чтобы продолжить диалог. Пример запроса и ответа —
+в английской части выше.
 
 ### Тесты
 
 ```bash
 uv run pytest --cov=src/app/services --cov-fail-under=60
 uv run ruff check .
-uv run mypy src
+uv run mypy .
 ```
 
 Каждая стадия покрыта юнит-тестами изолированно (LLM замокан, без сети,
 детерминированно), плюс сквозной тест воронки от приветствия до подсчитанного
-апселла и HTTP-тест через `httpx.AsyncClient`. Покрытие слоя `services/` — около 96%.
+апселла и HTTP-тест через `httpx.AsyncClient`. Покрытие слоя `services/` — около 98%.
+Тестами закреплены и два контракта: каждый промпт рендерится теми значениями, которые
+реально передаёт его стадия, а каждый `error_code`, который маппит pricing-гейтвей,
+всё ещё есть в опубликованном списке `ops-core-api`.
 
 ### Заметки по проду
-- Платный эндпоинт защищён: `POST /sales-agent/turn` **ограничен по частоте на IP**
+- Платный эндпоинт защищён: `POST /api/v1/turn` **ограничен по частоте на IP**
   (429 + `Retry-After`) и может требовать **входной API-ключ** (`X-API-Key`). Ключ
   опционален — без `INBOUND_API_KEY` эндпоинт открыт (чтобы демо запускалось без
   церемоний), с ним — обязателен, сравнение константного времени. Health-пробы не
   лимитируются.
+- CORS закрыт по умолчанию: `CORS_ALLOWED_ORIGINS` пуст, а не `*`. Примеры с `curl`
+  работают в любом случае, но **браузерный фронтенд не сможет обратиться к сервису,
+  пока его origin не указан** — иначе первое, что увидит потребитель, это ошибка
+  CORS в консоли. CORS зарегистрирован самым внешним слоем middleware, поэтому 429
+  от рейт-лимитера доходит до браузера с CORS-заголовками, а не как невнятное
+  «Failed to fetch».
 - Инвариант «не более одного прыжка» **обеспечивается**, а не проверяется через
   `assert`: нелегальный переход поднимает типизированное
   `InvalidStageTransitionError` (единый JSON-envelope), а не роняет 500 со стектрейсом.
