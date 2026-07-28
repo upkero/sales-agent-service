@@ -31,11 +31,12 @@ class PresentStage(DialogueStage):
         self._pricing = pricing
 
     async def prepare(self, conversation: Conversation) -> None:
-        if not self._needs_quote(conversation):
+        slots = self._slots_to_quote(conversation)
+        if slots is None:
             return
-        assert conversation.service is not None and conversation.quantity is not None  # noqa: S101
+        service, quantity = slots
         try:
-            conversation.quote = await self._pricing.quote(conversation.service, conversation.quantity)
+            conversation.quote = await self._pricing.quote(service, quantity)
             conversation.price_presented = False
         except ServiceNotFoundError:
             # Recoverable: the prospect named something not on the list. Drop the
@@ -87,15 +88,21 @@ class PresentStage(DialogueStage):
         return SalesStage.OBJECTION_HANDLING if decision.flag("objection") else SalesStage.UPSELL
 
     @staticmethod
-    def _needs_quote(conversation: Conversation) -> bool:
-        """Re-price only when there is no fresh quote for the current slots — so a
-        second PRESENT turn does not make a redundant call, but a corrected service
-        or quantity does trigger a new one."""
-        if conversation.service is None or conversation.quantity is None:
-            return False
+    def _slots_to_quote(conversation: Conversation) -> tuple[str, int] | None:
+        """The (service, quantity) that still need pricing, or None when nothing
+        does — so a second PRESENT turn makes no redundant call, but a corrected
+        service or quantity does trigger a new one.
+
+        It hands the slots back rather than answering yes/no on purpose: the
+        caller then holds values mypy already knows are not None, instead of an
+        `assert` restating a condition this method has just checked. Narrow the
+        type, do not raise — an assert on the request path disappears under
+        `python -O` and, on the one turn it did fire, would escape as a bare 500.
+        """
+        service, quantity = conversation.service, conversation.quantity
+        if service is None or quantity is None:
+            return None
         quote = conversation.quote
-        return (
-            quote is None
-            or quote.service_name.lower() != conversation.service.lower()
-            or quote.quantity != conversation.quantity
-        )
+        if quote is None or quote.service_name.lower() != service.lower() or quote.quantity != quantity:
+            return service, quantity
+        return None
