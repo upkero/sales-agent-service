@@ -17,11 +17,11 @@ from src.app.core.settings.agent import get_agent_settings
 from src.app.core.settings.conversation import get_conversation_store_settings
 from src.app.core.settings.core_api import get_core_api_settings
 from src.app.core.settings.llm import get_llm_settings
+from src.app.gateways.core_api_pricing import create_pricing_gateway
 from src.app.interfaces.conversation_repository import ConversationRepository
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
 from src.app.llm.factory import create_llm_client
-from src.app.repositories.core_api_pricing import create_pricing_gateway
 from src.app.repositories.memory_conversation import InMemoryConversationRepository
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.dialog.stages.close import CloseStage
@@ -30,8 +30,8 @@ from src.app.services.dialog.stages.objection import ObjectionHandlingStage
 from src.app.services.dialog.stages.present import PresentStage
 from src.app.services.dialog.stages.qualify import QualifyStage
 from src.app.services.dialog.stages.upsell import UpsellStage
+from src.app.services.sales.service import SalesService
 from src.app.services.sales.tactics import SalesTactic, VolumeDiscountTactic
-from src.app.services.sales_service import SalesService
 
 
 class ApplicationContainer:

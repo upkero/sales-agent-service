@@ -15,7 +15,7 @@ from src.app.exceptions.dialog import InvalidStageTransitionError
 from src.app.repositories.memory_conversation import InMemoryConversationRepository
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
-from src.app.services.sales_service import SalesService
+from src.app.services.sales.service import SalesService
 from tests.fakes import FakePricingGateway, StubLLM, build_container, control
 
 

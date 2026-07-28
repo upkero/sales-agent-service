@@ -5,7 +5,7 @@ from fastapi import Depends, Request
 from src.app.bootstrap.container import ApplicationContainer
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
-from src.app.services.sales_service import SalesService
+from src.app.services.sales.service import SalesService
 
 
 def get_container(request: Request) -> ApplicationContainer:

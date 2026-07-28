@@ -1,5 +1,13 @@
 """In-memory implementation of the ConversationRepository port.
 
+Why this repo has both a `repositories/` and a `gateways/`: the rule is
+`repositories/` for a store this service owns, `gateways/` for somebody else's
+service over the network. The pricing adapter moved to `gateways/` because
+ops-core-api is another team's HTTP API; this one stays here because it is a
+store — in process today, a Postgres table the day the conversation has to
+survive a restart, and either way behind the same `ConversationRepository` port.
+Two directories is the rule working, not an exception to it.
+
 A dict held on the container, so all requests in one process share it. That is
 enough for this service's scale and matches how the sibling voice-agent keeps its
 session state — no database to run, back up or migrate.

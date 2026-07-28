@@ -10,7 +10,7 @@ from pydantic import SecretStr
 
 from src.app.core.settings.core_api import CoreApiSettings
 from src.app.exceptions.pricing import PricingRateLimitedError, PricingUnavailableError, ServiceNotFoundError
-from src.app.repositories.core_api_pricing import CoreApiPricingGateway
+from src.app.gateways.core_api_pricing import CoreApiPricingGateway
 
 _ATTEMPTS = 2
 
