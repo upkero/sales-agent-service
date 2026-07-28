@@ -19,7 +19,12 @@ import httpx
 from src.app.contracts.pricing import PriceQuote, PricingItem
 from src.app.core.resilience import retry_async
 from src.app.core.settings.core_api import CoreApiSettings
-from src.app.exceptions.pricing import PricingError, PricingUnavailableError, ServiceNotFoundError
+from src.app.exceptions.pricing import (
+    PricingError,
+    PricingRateLimitedError,
+    PricingUnavailableError,
+    ServiceNotFoundError,
+)
 from src.app.interfaces.pricing_gateway import PricingGateway
 
 logger = getLogger(__name__)
@@ -36,12 +41,26 @@ _ERROR_CODES: dict[str, type[PricingError]] = {
 }
 
 
+# What we tell our own caller to wait when ops-core-api throttled us without
+# saying for how long. Short: the window it enforces is per minute.
+_DEFAULT_RETRY_AFTER = "5"
+
+
 class _TransientError(Exception):
     """Internal marker for failures worth repeating.
 
     Private to this module: it exists only to tell the retry decorator what to
-    retry and never reaches a caller — the last one becomes PricingUnavailableError.
+    retry and never reaches a caller — the last one becomes PricingUnavailableError
+    or, for a 429, PricingRateLimitedError.
+
+    It carries the response when there was one, because the retry policy reads
+    `Retry-After` off it. That read is duck-typed in core/resilience.py, which is
+    how a retry policy stays reusable for things that are not HTTP.
     """
+
+    def __init__(self, message: str, response: httpx.Response | None = None) -> None:
+        super().__init__(message)
+        self.response = response
 
 
 class CoreApiPricingGateway(PricingGateway):
@@ -98,6 +117,12 @@ class CoreApiPricingGateway(PricingGateway):
                 exc,
                 extra={"attempts": self._settings.max_attempts},
             )
+            if exc.response is not None and exc.response.status_code == httpx.codes.TOO_MANY_REQUESTS:
+                # Still throttled after every attempt. Pass the upstream's own
+                # Retry-After along instead of reporting it as broken: "wait n
+                # seconds" is the one actionable thing the caller can be told.
+                retry_after = exc.response.headers.get("Retry-After", _DEFAULT_RETRY_AFTER)
+                raise PricingRateLimitedError(headers={"Retry-After": retry_after}) from exc
             raise PricingUnavailableError() from exc
 
     async def _send_once(self, method: str, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -108,10 +133,16 @@ class CoreApiPricingGateway(PricingGateway):
         except httpx.TransportError as exc:
             raise _TransientError(f"{method} {path} failed to connect: {exc}") from exc
 
+        if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
+            # The one 4xx worth repeating: it says "not now", not "no". The
+            # response rides along so the retry policy can honour Retry-After
+            # instead of guessing with its own backoff curve.
+            raise _TransientError(f"{method} {path} was rate limited", response)
         if response.status_code >= 500:
-            # Server-side and possibly momentary. A 4xx is not: repeating a
-            # rejected request just makes the prospect wait for the same answer.
-            raise _TransientError(f"{method} {path} returned {response.status_code}")
+            # Server-side and possibly momentary (503 while it restarts, say). A
+            # 4xx is not: repeating a rejected request just makes the prospect
+            # wait for the same answer.
+            raise _TransientError(f"{method} {path} returned {response.status_code}", response)
         if response.status_code >= 400:
             raise self._to_exception(response)
 

@@ -29,6 +29,20 @@ class PricingUnavailableError(PricingError):
     default_detail = "The pricing service is unavailable."
 
 
+class PricingRateLimitedError(PricingError):
+    """ops-core-api is throttling us, and still was after every retry.
+
+    Deliberately not a 503: "busy, come back in n seconds" and "broken" are
+    different answers, and only one of them tells the caller what to do next.
+    The upstream's own Retry-After is passed straight through, because it knows
+    when it will be free and we are only guessing.
+    """
+
+    status_code = 429
+    error_code = "rate_limit_exceeded"
+    default_detail = "The pricing service is busy. Please retry shortly."
+
+
 class ServiceNotFoundError(PricingError):
     """The named service is not in the catalogue.
 

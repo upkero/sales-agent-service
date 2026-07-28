@@ -23,9 +23,14 @@ class BaseAppException(Exception):
         status_code: int | None = None,
         error_code: str | None = None,
         extra: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         self.detail = detail or self.default_detail
         self.status_code = status_code or type(self).status_code
         self.error_code = error_code or type(self).error_code
         self.extra = dict(extra or {})
+        # Response headers the envelope must carry. Empty for almost every
+        # failure; a 429 is the case that has something to say (Retry-After),
+        # and it belongs on the exception rather than in a special-cased handler.
+        self.headers = dict(headers or {})
         super().__init__(self.detail)
