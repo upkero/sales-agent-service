@@ -4,7 +4,9 @@ from src.app.api.v1.dependencies import SalesServiceDep
 from src.app.api.v1.dependencies.security import require_api_key
 from src.app.schemas.sales import TurnRequest, TurnResponse
 
-router = APIRouter(prefix="/sales-agent", tags=["sales-agent"])
+# No "/sales-agent" segment: the host and port already say which service this is,
+# and repeating it in the path is a stutter every caller has to type.
+router = APIRouter(tags=["sales-agent"])
 
 
 # require_api_key gates the route when a key is configured (a no-op otherwise);

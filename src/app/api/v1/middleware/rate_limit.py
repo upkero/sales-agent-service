@@ -1,6 +1,6 @@
 """A per-IP cap on the one endpoint that costs money to call.
 
-`POST /sales-agent/turn` drives a paid LLM call on every request, so an open,
+`POST /api/v1/turn` drives a paid LLM call on every request, so an open,
 unbounded endpoint is a direct route to a surprise bill. This caps it per client.
 Everything else (health) is cheap and left alone.
 
@@ -24,7 +24,7 @@ from src.app.exceptions.rate_limit import RateLimitExceededError
 
 logger = getLogger(__name__)
 
-_GUARDED_PATH = "/api/v1/sales-agent/turn"
+_GUARDED_PATH = "/api/v1/turn"
 
 # ponytail: in-memory counters, so the window is per process. Correct while the
 # Dockerfile pins uvicorn to one worker; swap MemoryStorage for Redis storage if

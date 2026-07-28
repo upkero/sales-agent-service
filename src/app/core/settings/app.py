@@ -31,7 +31,7 @@ class AppSettings(BaseSettings):
     turn_rate_limit_per_minute: int = Field(
         default=30,
         gt=0,
-        description="Per-IP cap on POST /sales-agent/turn. Bounds both abuse and LLM spend.",
+        description="Per-IP cap on POST /api/v1/turn. Bounds both abuse and LLM spend.",
     )
 
     model_config = SettingsConfigDict(

@@ -16,7 +16,7 @@ from src.app.interfaces.pricing_gateway import PricingGateway
 from src.main import create_app
 from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, build_container, control
 
-TURN = "/api/v1/sales-agent/turn"
+TURN = "/api/v1/turn"
 
 
 @asynccontextmanager
