@@ -45,3 +45,7 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# The repo root on sys.path, so `from src.app…` and `from tests.fakes…` resolve.
+# Stated rather than inferred: with no `tests/__init__.py` to stop at, pytest
+# would otherwise have to work the root out by walking up from each test file.
+pythonpath = ["."]
