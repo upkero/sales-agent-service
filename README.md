@@ -68,7 +68,7 @@ You need a running [`ops-core-api`](../ops-core-api) (the price list) and an LLM
 endpoint (a local [Ollama](https://ollama.com) is the zero-cost default).
 
 ```bash
-cp .env.example .env          # set CORE_API_API_KEY to your ops-core-api key
+cp .env.example .env          # set OPS_CORE_API_KEY to your ops-core-api key
 docker compose up --build     # serves on http://localhost:8001
 ```
 
@@ -196,7 +196,7 @@ Strategy, Factory, Dependency Inversion.
 ### Запуск
 
 ```bash
-cp .env.example .env          # укажите CORE_API_API_KEY от вашего ops-core-api
+cp .env.example .env          # укажите OPS_CORE_API_KEY от вашего ops-core-api
 docker compose up --build     # http://localhost:8001
 ```
 

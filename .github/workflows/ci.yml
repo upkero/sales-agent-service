@@ -15,7 +15,7 @@ jobs:
     env:
       # Settings are read at import time, and a required key with no value would
       # fail collection before any test runs. Throwaway CI values.
-      CORE_API_API_KEY: ci-placeholder-key-not-a-secret
+      OPS_CORE_API_KEY: ci-placeholder-key-not-a-secret
       LLM_MODEL: ci-stub-model
 
     steps:

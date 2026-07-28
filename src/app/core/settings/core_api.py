@@ -34,7 +34,10 @@ class CoreApiSettings(BaseSettings):
         description="Total attempts per call, including the first. Bounded: retries cost the prospect silence.",
     )
 
-    model_config = SettingsConfigDict(env_prefix="CORE_API_", env_file=".env", extra="ignore")
+    # OPS_CORE_ is the prefix every consumer of ops-core-api uses (voice, rag, mcp
+    # and this one), so one operator note covers all of them and a copied .env
+    # keeps working when it moves between services.
+    model_config = SettingsConfigDict(env_prefix="OPS_CORE_", env_file=".env", extra="ignore")
 
 
 @lru_cache(maxsize=1)
