@@ -55,9 +55,15 @@ class SalesService:
             existing = await self._conversations.get(conversation_id)
             if existing is not None:
                 return existing
-        # No id, or an id we have never seen: begin a fresh conversation. Minting
-        # the id here (not at the edge) keeps a caller from smuggling in state.
-        return Conversation(id=conversation_id or str(uuid4()))
+        # No id, or an id we have never seen: begin a fresh conversation under an
+        # id we mint. A known id continues that conversation; anything else starts
+        # a new one and gets told its real id back. The id is the caller's handle
+        # on its own dialogue, not a way to reach someone else's — it is
+        # unguessable precisely because the server chose it. Honouring the
+        # caller's id here instead would let two clients that both sent "1" land
+        # in the same conversation, which nothing about "continue my dialogue"
+        # needs: that feature wants a *lookup*, not a create.
+        return Conversation(id=str(uuid4()))
 
     @staticmethod
     def _guard_transition(conversation: Conversation, current: SalesStage, requested: SalesStage) -> None:

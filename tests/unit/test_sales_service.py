@@ -131,6 +131,18 @@ async def test_repeated_unparseable_output_escalates_to_a_bounded_handoff() -> N
     assert second.stage is SalesStage.GREETING
 
 
+async def test_an_unknown_id_starts_a_conversation_under_a_server_minted_id() -> None:
+    service = build_container(StubLLM(control("Hello!")), FakePricingGateway()).sales_service
+
+    outcome = await service.take_turn("1", "hello")
+
+    # A miss is a miss: the caller's id is not adopted, or two clients that both
+    # guessed "1" would be talking into the same conversation. The frontend is
+    # unaffected — it continues with whatever id came back.
+    assert outcome.conversation_id != "1"
+    assert await service.take_turn(outcome.conversation_id, "still me") is not None
+
+
 class _RogueStage(DialogueStage):
     """A stage whose route() returns a target it was never allowed to reach."""
 
