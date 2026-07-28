@@ -8,9 +8,10 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from src.app.core.request_id import set_request_id
 from src.app.core.settings.core_api import CoreApiSettings
 from src.app.exceptions.pricing import PricingRateLimitedError, PricingUnavailableError, ServiceNotFoundError
-from src.app.gateways.core_api_pricing import CoreApiPricingGateway
+from src.app.gateways.core_api_pricing import CoreApiPricingGateway, _inject_request_id
 
 _ATTEMPTS = 2
 
@@ -52,3 +53,36 @@ async def test_a_known_error_code_becomes_its_typed_exception() -> None:
 
     with pytest.raises(ServiceNotFoundError):
         await _gateway(transport).quote("Hot Stone Facial", 1)
+
+
+async def test_the_incoming_request_id_travels_to_ops_core_api() -> None:
+    sent: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, json=_QUOTE_BODY)
+
+    settings = CoreApiSettings(api_key=SecretStr("test-key-1234567890"))
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(respond),
+        base_url=settings.base_url,
+        event_hooks={"request": [_inject_request_id]},
+    )
+    set_request_id("turn-42")
+
+    await CoreApiPricingGateway(settings, client).quote("Deep Tissue Massage", 3)
+
+    # One id spans both services' logs, which is the whole point of accepting
+    # the header at the edge and never forwarding it.
+    assert sent[0].headers["X-Request-ID"] == "turn-42"
+
+
+_QUOTE_BODY = {
+    "service_name": "Deep Tissue Massage",
+    "unit_price": "120.00",
+    "quantity": 3,
+    "subtotal": "360.00",
+    "discount_percent": "0",
+    "discount_amount": "0.00",
+    "total": "360.00",
+}

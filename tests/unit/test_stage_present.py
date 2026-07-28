@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.core.settings.agent import SalesAgentSettings
 from src.app.services.dialog.stages.present import PresentStage
 from tests.fakes import FakePricingGateway, StubLLM, compute_quote, control
 
@@ -13,7 +14,8 @@ def _priced_conversation() -> Conversation:
 
 
 async def test_fetches_the_price_states_it_and_waits_for_a_reaction(
-    agent_settings, pricing: FakePricingGateway
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
 ) -> None:
     stage = PresentStage(StubLLM(control("That comes to 360 in total.", objection=False)), agent_settings, pricing)
     conversation = _priced_conversation()
@@ -28,7 +30,10 @@ async def test_fetches_the_price_states_it_and_waits_for_a_reaction(
     assert ("quote", "Deep Tissue Massage", "3") in pricing.calls
 
 
-async def test_no_objection_skips_straight_to_upsell(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_no_objection_skips_straight_to_upsell(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     conversation = _priced_conversation()
     conversation.quote = compute_quote("Deep Tissue Massage", Decimal("120.00"), 3)
     conversation.price_presented = True  # the price was stated last turn
@@ -40,7 +45,10 @@ async def test_no_objection_skips_straight_to_upsell(agent_settings, pricing: Fa
     assert result.next_stage is SalesStage.UPSELL
 
 
-async def test_an_objection_routes_to_objection_handling(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_an_objection_routes_to_objection_handling(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     conversation = _priced_conversation()
     conversation.quote = compute_quote("Deep Tissue Massage", Decimal("120.00"), 3)
     conversation.price_presented = True
@@ -51,7 +59,10 @@ async def test_an_objection_routes_to_objection_handling(agent_settings, pricing
     assert result.next_stage is SalesStage.OBJECTION_HANDLING
 
 
-async def test_unknown_service_recovers_by_offering_the_catalogue(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_unknown_service_recovers_by_offering_the_catalogue(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     conversation = Conversation(id="c1", stage=SalesStage.PRESENT, service="Hot Stone Facial", quantity=2)
     conversation.add_user("what's the price on that?")
     stage = PresentStage(StubLLM(control("We don't offer that one, but here's what we have.")), agent_settings, pricing)

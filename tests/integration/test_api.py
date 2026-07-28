@@ -8,7 +8,9 @@ cannot see.
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.app.core.settings.app import get_app_settings
@@ -73,9 +75,10 @@ async def test_a_conversation_is_continued_by_its_id() -> None:
     ]
     async with _client(script) as client:
 
-        async def turn(message: str, conversation_id: str | None = None) -> dict:
+        async def turn(message: str, conversation_id: str | None = None) -> dict[str, Any]:
             payload = {"message": message, "conversation_id": conversation_id}
-            return (await client.post(TURN, json=payload)).json()
+            body: dict[str, Any] = (await client.post(TURN, json=payload)).json()
+            return body
 
         first = await turn("hi")
         cid = first["conversation_id"]
@@ -137,7 +140,7 @@ async def test_the_turn_endpoint_is_open_when_no_key_is_configured() -> None:
     assert response.status_code == 200
 
 
-async def test_inbound_auth_is_enforced_when_a_key_is_configured(monkeypatch) -> None:
+async def test_inbound_auth_is_enforced_when_a_key_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("INBOUND_API_KEY", "s3cret-inbound-key-value")
     get_app_settings.cache_clear()  # settings are cached; rebuild them with the key set
     try:

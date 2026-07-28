@@ -1,10 +1,11 @@
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.core.settings.agent import SalesAgentSettings
 from src.app.services.dialog.stages.greeting import GreetingStage
 from tests.fakes import StubLLM, control
 
 
-async def test_greeting_replies_and_always_moves_to_qualify(agent_settings) -> None:
+async def test_greeting_replies_and_always_moves_to_qualify(agent_settings: SalesAgentSettings) -> None:
     stage = GreetingStage(StubLLM(control("Hi, I'm Alex from Aurora Wellness — what can I help with?")), agent_settings)
     conversation = Conversation(id="c1")
     conversation.add_user("hello")

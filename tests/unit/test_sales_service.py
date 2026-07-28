@@ -10,7 +10,8 @@ from decimal import Decimal
 import pytest
 
 from src.app.contracts.conversation import Conversation
-from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage
+from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
+from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.dialog import InvalidStageTransitionError
 from src.app.repositories.memory_conversation import InMemoryConversationRepository
 from src.app.services.dialog.decision import AgentDecision
@@ -19,7 +20,11 @@ from src.app.services.sales.service import SalesService
 from tests.fakes import FakePricingGateway, StubLLM, build_container, control
 
 
-async def _drive(service: SalesService, messages: list[str], conversation_id: str | None = None) -> list:
+async def _drive(
+    service: SalesService,
+    messages: list[str],
+    conversation_id: str | None = None,
+) -> list[TurnOutcome]:
     outcomes = []
     for message in messages:
         outcome = await service.take_turn(conversation_id, message)
@@ -84,7 +89,7 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
     # The DoD: the upsell price is the real, discounted total from the pricing
     # service — 6 x 120 = 720, less the 10% volume discount = 648.00.
     assert ("quote", "Deep Tissue Massage", "6") in pricing.calls
-    conversation = await service._conversations.get(outcomes[-1].conversation_id)  # type: ignore[attr-defined]
+    conversation = await service._conversations.get(outcomes[-1].conversation_id)
     assert conversation is not None
     assert conversation.upsell_quote is not None
     assert conversation.upsell_quote.total == Decimal("648.00")
@@ -155,7 +160,7 @@ class _RogueStage(DialogueStage):
         return SalesStage.CLOSE  # illegal from GREETING
 
 
-async def test_an_illegal_transition_is_a_typed_error_not_a_crash(agent_settings) -> None:
+async def test_an_illegal_transition_is_a_typed_error_not_a_crash(agent_settings: SalesAgentSettings) -> None:
     service = SalesService(
         InMemoryConversationRepository(ttl_seconds=3600.0, max_entries=100),
         {SalesStage.GREETING: _RogueStage(StubLLM(control("hi")), agent_settings)},

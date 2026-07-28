@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 from src.app.contracts.pricing import PriceQuote, PricingItem
+from src.app.core.request_id import get_request_id
 from src.app.core.resilience import retry_async
 from src.app.core.settings.core_api import CoreApiSettings
 from src.app.exceptions.pricing import (
@@ -198,11 +199,24 @@ class CoreApiPricingGateway(PricingGateway):
         )
 
 
+async def _inject_request_id(request: httpx.Request) -> None:
+    """Carry the caller's request id on to ops-core-api.
+
+    An event hook rather than a static header: the client is built once when the
+    container starts, and the id is different on every request. Reading the
+    ContextVar at send time is what lets one id tie a prospect's turn to the
+    pricing call it caused, in two services' logs.
+    """
+    if request_id := get_request_id():
+        request.headers["X-Request-ID"] = request_id
+
+
 def create_pricing_gateway(settings: CoreApiSettings) -> CoreApiPricingGateway:
     """Factory: the one place the HTTP client for ops-core-api is built."""
     client = httpx.AsyncClient(
         base_url=settings.base_url,
         timeout=settings.timeout_seconds,
         headers={"X-API-Key": settings.api_key.get_secret_value()},
+        event_hooks={"request": [_inject_request_id]},
     )
     return CoreApiPricingGateway(settings, client)

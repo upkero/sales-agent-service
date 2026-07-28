@@ -1,5 +1,6 @@
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.core.settings.agent import SalesAgentSettings
 from src.app.services.dialog.stages.qualify import QualifyStage
 from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, control
 
@@ -10,7 +11,10 @@ def _qualifying_conversation() -> Conversation:
     return conversation
 
 
-async def test_advances_to_present_once_both_slots_are_filled(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_advances_to_present_once_both_slots_are_filled(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     stage = QualifyStage(
         StubLLM(control("Great — three deep tissue massages.", service="Deep Tissue Massage", quantity=3)),
         agent_settings,
@@ -26,7 +30,10 @@ async def test_advances_to_present_once_both_slots_are_filled(agent_settings, pr
     assert ("list_services",) in pricing.calls  # grounded on the real catalogue
 
 
-async def test_stays_in_qualify_until_quantity_is_known(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_stays_in_qualify_until_quantity_is_known(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     stage = QualifyStage(
         StubLLM(control("Which service would you like?", service="Deep Tissue Massage")),
         agent_settings,
@@ -40,7 +47,10 @@ async def test_stays_in_qualify_until_quantity_is_known(agent_settings, pricing:
     assert result.next_stage is SalesStage.QUALIFY
 
 
-async def test_snaps_a_loose_name_onto_the_exact_catalogue_name(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_snaps_a_loose_name_onto_the_exact_catalogue_name(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     stage = QualifyStage(
         StubLLM(control("Got it.", service="deep tissue massage", quantity=2)),
         agent_settings,
@@ -55,7 +65,7 @@ async def test_snaps_a_loose_name_onto_the_exact_catalogue_name(agent_settings, 
     assert conversation.service == "Deep Tissue Massage"
 
 
-async def test_grounding_degrades_when_pricing_is_down(agent_settings) -> None:
+async def test_grounding_degrades_when_pricing_is_down(agent_settings: SalesAgentSettings) -> None:
     stage = QualifyStage(
         StubLLM(control("Sure, what would you like?", service="Deep Tissue Massage", quantity=2)),
         agent_settings,

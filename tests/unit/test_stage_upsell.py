@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.core.settings.agent import SalesAgentSettings
 from src.app.services.dialog.stages.upsell import UpsellStage
 from src.app.services.sales.tactics import VolumeDiscountTactic
 from tests.fakes import FakePricingGateway, StubLLM, compute_quote, control
@@ -14,7 +15,10 @@ def _ready_conversation(quantity: int = 3) -> Conversation:
     return conversation
 
 
-async def test_offers_the_next_tier_at_a_live_discounted_price(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_offers_the_next_tier_at_a_live_discounted_price(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     stage = UpsellStage(
         StubLLM(control("Book six and you'll save 10% — 648 instead of 720.", accept=True)),
         agent_settings,
@@ -35,7 +39,10 @@ async def test_offers_the_next_tier_at_a_live_discounted_price(agent_settings, p
     assert result.next_stage is SalesStage.UPSELL  # offered this turn, awaits the answer
 
 
-async def test_closes_after_the_prospect_responds_to_the_offer(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_closes_after_the_prospect_responds_to_the_offer(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     conversation = _ready_conversation(quantity=3)
     conversation.upsell_quote = compute_quote("Deep Tissue Massage", Decimal("120.00"), 6)
     conversation.upsell_offered = True  # the offer was made last turn
@@ -47,7 +54,10 @@ async def test_closes_after_the_prospect_responds_to_the_offer(agent_settings, p
     assert result.next_stage is SalesStage.CLOSE
 
 
-async def test_at_the_top_tier_there_is_nothing_to_upsell(agent_settings, pricing: FakePricingGateway) -> None:
+async def test_at_the_top_tier_there_is_nothing_to_upsell(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
     stage = UpsellStage(
         StubLLM(control("You're already getting our best rate — shall we book it?")),
         agent_settings,
