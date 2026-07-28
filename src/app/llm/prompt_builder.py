@@ -4,10 +4,10 @@ from src.app.contracts.llm.llm_message import LLMMessage, LLMRole
 
 
 class PromptBuilder:
-    """A tiny fluent builder so a stage assembles its prompt readably.
+    """A tiny fluent builder so a caller assembles its prompt readably.
 
     It carries no logic beyond ordering; the interesting decisions (what the
-    system prompt says, which history to include) live in the stage.
+    system prompt says, which history to include) live in the caller.
     """
 
     def __init__(self) -> None:

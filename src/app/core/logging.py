@@ -25,8 +25,9 @@ class _JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             data["exception"] = self.formatException(record.exc_info)
-        # Any non-stdlib attribute (passed via logger extra=...) is structured
-        # context — request_id, the two stages of a bad transition, and so on.
+        # Any non-stdlib LogRecord attribute is structured context passed via
+        # `extra={...}`, so it is merged into the JSON payload as-is. That is how a
+        # service emits its own fields without wrapping the logger.
         for key, value in record.__dict__.items():
             if key not in _STDLIB_ATTRS:
                 data[key] = value
