@@ -2,8 +2,11 @@ from typing import ClassVar
 
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
+
+_GREETING = get_prompt("stage_greeting")
 
 
 class GreetingStage(DialogueStage):
@@ -14,13 +17,10 @@ class GreetingStage(DialogueStage):
     possible `route()`, and the reason greeting needs no `data`."""
 
     stage: ClassVar[SalesStage] = SalesStage.GREETING
+    prompts: ClassVar[tuple[Prompt, ...]] = (_GREETING,)
 
     def directive(self, conversation: Conversation) -> str:
-        return (
-            "This is the very start of the conversation. Greet the customer warmly, introduce "
-            "yourself and the company in one line, and ask what brought them in or what they are "
-            "looking for today. Do not pitch anything yet."
-        )
+        return _GREETING.text
 
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
         # Move straight into qualification next turn; the greeting has done its one job.

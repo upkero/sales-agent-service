@@ -5,9 +5,13 @@ from src.app.contracts.sales import SalesStage
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
+from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.sales.tactics import SalesTactic
+
+_UPSELL = get_prompt("stage_upsell")
+_AFFIRM = get_prompt("stage_upsell_affirm")
 
 
 class UpsellStage(DialogueStage):
@@ -20,6 +24,7 @@ class UpsellStage(DialogueStage):
     once they respond either way."""
 
     stage: ClassVar[SalesStage] = SalesStage.UPSELL
+    prompts: ClassVar[tuple[Prompt, ...]] = (_UPSELL, _AFFIRM)
 
     def __init__(
         self,
@@ -46,17 +51,10 @@ class UpsellStage(DialogueStage):
 
     def directive(self, conversation: Conversation) -> str:
         if conversation.upsell_quote is None:
-            return (
-                "The customer is happy with their choice and there is no larger package worth "
-                "suggesting. Warmly affirm their decision and encourage them to go ahead and book."
-            )
-        current = self._describe_quote(conversation.quote) if conversation.quote else ""
-        upsell = self._describe_quote(conversation.upsell_quote)
-        return (
-            "The customer is on board. Offer them a better-value option in one natural, upbeat "
-            f"sentence: {upsell} Contrast it with their current plan ({current}), pointing out the "
-            "lower effective price per session. Invite them to take the larger package, without "
-            'pressure. In "data", set "accept" to true if they agree to it.'
+            return _AFFIRM.text
+        return _UPSELL.render(
+            upsell_facts=self._describe_quote(conversation.upsell_quote),
+            current_facts=self._describe_quote(conversation.quote) if conversation.quote else "",
         )
 
     def data_spec(self) -> str:

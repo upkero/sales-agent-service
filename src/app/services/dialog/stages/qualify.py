@@ -7,11 +7,14 @@ from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.pricing import PricingError
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
+from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.extraction import canonical_service, coerce_quantity
 from src.app.services.dialog.stages.base import DialogueStage
 
 logger = getLogger(__name__)
+
+_QUALIFY = get_prompt("stage_qualify")
 
 
 class QualifyStage(DialogueStage):
@@ -24,6 +27,7 @@ class QualifyStage(DialogueStage):
     slots are genuinely filled — the model cannot talk the machine forward."""
 
     stage: ClassVar[SalesStage] = SalesStage.QUALIFY
+    prompts: ClassVar[tuple[Prompt, ...]] = (_QUALIFY,)
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings, pricing: PricingGateway) -> None:
         super().__init__(llm, settings)
@@ -47,16 +51,7 @@ class QualifyStage(DialogueStage):
             if conversation.offered_services
             else ""
         )
-        known = self._known_slots(conversation)
-        return (
-            f"{catalogue}Your job now is to learn which service the customer wants and how many "
-            "sessions or units they need. Ask about whichever is still missing, one friendly question "
-            "at a time. Do not quote any prices yet. "
-            f"{known}"
-            'In "data", report what you now know: set "service" to the exact catalogue name that '
-            'best matches what they want (or null if still unclear), and "quantity" to the number '
-            "of sessions as an integer (or null)."
-        )
+        return _QUALIFY.render(catalogue=catalogue, known_slots=self._known_slots(conversation))
 
     def data_spec(self) -> str:
         return '"service": string|null, "quantity": integer|null'

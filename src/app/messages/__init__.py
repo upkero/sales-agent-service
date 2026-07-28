@@ -1,0 +1,35 @@
+"""Text the customer reads verbatim, one entry per supported language.
+
+This is the deliberate counterpart to `prompts/`, not an overflow of it. A prompt
+is an instruction to the model: it lives in `prompts/`, in English, in exactly one
+copy, and the reply language is a placeholder inside it. These lines are the
+opposite — nobody paraphrases them, the customer receives them character for
+character — so they have to exist once per language. Keeping them out of
+`prompts/` is what stops the "prompts are English" rule breaking on its first day.
+
+They are also the two things the agent says when the model is not usable at all
+(unparseable control output), so they cannot come from the model by definition.
+"""
+
+_MESSAGES: dict[str, dict[str, str]] = {
+    "en": {
+        "clarifier": "Sorry, I didn't quite catch that — could you say it once more?",
+        "handoff": "Let me take your details and have a specialist follow up with you directly.",
+    },
+    "ru": {
+        "clarifier": "Извините, я не расслышал. Не могли бы вы повторить?",
+        "handoff": "Давайте я передам вас специалисту, который свяжется с вами и всё уточнит.",
+    },
+}
+
+_FALLBACK_LANGUAGE = "en"
+
+
+def get_message(language: str, key: str) -> str:
+    """The line for this language, falling back to English for one we do not carry.
+
+    A missing language is a configuration gap, not a reason to say nothing: the
+    prospect gets an English sentence rather than a blank turn. A missing *key*
+    is a bug in this repository and raises, because no fallback could be right.
+    """
+    return _MESSAGES.get(language, _MESSAGES[_FALLBACK_LANGUAGE])[key]

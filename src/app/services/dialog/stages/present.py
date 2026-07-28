@@ -6,9 +6,13 @@ from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.pricing import ServiceNotFoundError
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
+from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.extraction import canonical_service, coerce_quantity
 from src.app.services.dialog.stages.base import DialogueStage
+
+_PRESENT = get_prompt("stage_present")
+_UNKNOWN_SERVICE = get_prompt("stage_present_unknown_service")
 
 
 class PresentStage(DialogueStage):
@@ -25,6 +29,7 @@ class PresentStage(DialogueStage):
     offering the real catalogue and letting the prospect re-choose."""
 
     stage: ClassVar[SalesStage] = SalesStage.PRESENT
+    prompts: ClassVar[tuple[Prompt, ...]] = (_PRESENT, _UNKNOWN_SERVICE)
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings, pricing: PricingGateway) -> None:
         super().__init__(llm, settings)
@@ -49,18 +54,11 @@ class PresentStage(DialogueStage):
 
     def directive(self, conversation: Conversation) -> str:
         if conversation.quote is None:
-            catalogue = ", ".join(conversation.offered_services) or "our listed services"
-            return (
-                f"We do not offer '{conversation.service}'. Apologise briefly and tell the customer "
-                f"what we do offer: {catalogue}. Ask which of these they would like. "
-                'In "data", set "service" to the exact catalogue name if they name one, else null.'
+            return _UNKNOWN_SERVICE.render(
+                requested_service=conversation.service,
+                catalogue=", ".join(conversation.offered_services) or "our listed services",
             )
-        return (
-            "Present this offer to the customer in a natural, confident sentence, stating the total "
-            f"clearly. The facts: {self._describe_quote(conversation.quote)} "
-            "Then invite their reaction. If they push back on price or value, that is an objection. "
-            'In "data", set "objection" to true only if they actually raised a concern this turn.'
-        )
+        return _PRESENT.render(quote_facts=self._describe_quote(conversation.quote))
 
     def data_spec(self) -> str:
         return '"objection": boolean, "service": string|null, "quantity": integer|null'

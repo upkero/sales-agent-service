@@ -2,8 +2,11 @@ from typing import ClassVar
 
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
+
+_OBJECTION = get_prompt("stage_objection")
 
 
 class ObjectionHandlingStage(DialogueStage):
@@ -16,15 +19,11 @@ class ObjectionHandlingStage(DialogueStage):
     single reassuring sentence does not get mistaken for agreement."""
 
     stage: ClassVar[SalesStage] = SalesStage.OBJECTION_HANDLING
+    prompts: ClassVar[tuple[Prompt, ...]] = (_OBJECTION,)
 
     def directive(self, conversation: Conversation) -> str:
         quote_facts = self._describe_quote(conversation.quote) if conversation.quote else ""
-        return (
-            "The customer has a concern about the offer. Acknowledge it genuinely and answer it in "
-            "one or two sentences. If it is about price, remind them that buying more sessions unlocks "
-            f"a volume discount. The current offer: {quote_facts} "
-            'In "data", set "resolved" to true only once the customer seems satisfied or ready to move on.'
-        )
+        return _OBJECTION.render(quote_facts=quote_facts)
 
     def data_spec(self) -> str:
         return '"resolved": boolean'

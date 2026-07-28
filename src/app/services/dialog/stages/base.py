@@ -7,6 +7,14 @@ between steps of the funnel — its `directive()` (what to instruct the model) a
 its `route()` (when to advance) — and optionally the `prepare()`/`absorb()`/
 `data_spec()` hooks. It can never reshuffle the skeleton, which is what keeps the
 control flow identical and the orchestrator free of per-stage branching.
+
+None of the text itself is here. Persona, output contract, re-ask and every
+per-stage directive are Markdown in `prompts/`; what a stage supplies is which
+prompt and which values, never the wording. The two sentences the customer reads
+verbatim when the model is unusable come from `messages/`, which is the same
+separation from the other side: `prompts/` is English because that is where the
+instruction is best followed, `messages/` is per-language because nobody
+paraphrases it.
 """
 
 from abc import ABC, abstractmethod
@@ -20,21 +28,30 @@ from src.app.contracts.sales import SalesStage, StageResult
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.llm.prompt_builder import PromptBuilder
+from src.app.messages import get_message
+from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 
 logger = getLogger(__name__)
 
+# The prompt files are English; this is what the {reply_language} placeholder in
+# persona.md is filled with. The instruction is never translated — only the
+# language it names changes.
 _LANGUAGE_NAMES = {"en": "English", "ru": "Russian"}
 
-_STRICT_REASK = (
-    "Your previous reply was not a single valid JSON object. Reply again with ONLY "
-    "the JSON object described above — no prose, no code fences — and nothing else."
-)
+_PERSONA = get_prompt("persona")
+_OUTPUT_CONTRACT = get_prompt("output_contract")
+_STRICT_REASK = get_prompt("strict_reask")
 
 
 class DialogueStage(ABC):
     #: Which stage of the funnel this class owns. Set by every concrete subclass.
     stage: ClassVar[SalesStage]
+
+    #: Every prompt this stage can send. Only used to say, in a log line, which
+    #: revision of which text produced a given turn — so an answer that reads
+    #: wrong six weeks from now can be pinned to the wording that was live.
+    prompts: ClassVar[tuple[Prompt, ...]] = ()
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings) -> None:
         self._llm = llm
@@ -46,6 +63,13 @@ class DialogueStage(ABC):
     async def handle(self, conversation: Conversation) -> StageResult:
         await self.prepare(conversation)
         messages = self._compose_prompt(conversation)
+        # Debug, not info: this is one line per turn and its only reader is
+        # somebody already looking at a specific conversation.
+        logger.debug(
+            "Sending the %s prompt set",
+            self.stage.value,
+            extra={"conversation_id": conversation.id, "prompt_ids": self._prompt_ids()},
+        )
         decision = await self._decide(messages)
 
         if decision is None:
@@ -103,23 +127,20 @@ class DialogueStage(ABC):
         return "\n\n".join(section.strip() for section in sections if section.strip())
 
     def _persona(self) -> str:
-        language = _LANGUAGE_NAMES.get(self._settings.language, "English")
-        return (
-            f"You are {self._settings.name}, a warm, concise sales representative for "
-            f"{self._settings.company}. You reply only in {language}. You are helpful and "
-            "human, never pushy or robotic. Keep every reply to one or two short sentences."
+        return _PERSONA.render(
+            agent_name=self._settings.name,
+            company=self._settings.company,
+            reply_language=_LANGUAGE_NAMES.get(self._settings.language, "English"),
         )
 
     def _output_contract(self) -> str:
+        # Padded here rather than in the template so a stage that wants no data
+        # gets `"data": {}` and not `"data": {  }`.
         spec = self.data_spec()
-        data_line = f'  "data": {{ {spec} }}' if spec else '  "data": {}'
-        return (
-            "Respond with a single JSON object and nothing else, of the form:\n"
-            "{\n"
-            '  "reply": "<what you say to the customer>",\n'
-            f"{data_line}\n"
-            "}"
-        )
+        return _OUTPUT_CONTRACT.render(data_fields=f" {spec} " if spec else "")
+
+    def _prompt_ids(self) -> list[str]:
+        return [prompt.id for prompt in (_PERSONA, _OUTPUT_CONTRACT, *self.prompts)]
 
     async def _decide(self, messages: list[LLMMessage]) -> AgentDecision | None:
         response = await self._llm.complete(messages, json_mode=True)
@@ -128,7 +149,8 @@ class DialogueStage(ABC):
             return decision
 
         # One strict re-ask fixes the common single hiccup without a visible stall.
-        retry = await self._llm.complete([*messages, LLMMessage(role="system", content=_STRICT_REASK)], json_mode=True)
+        reask = LLMMessage(role="system", content=_STRICT_REASK.text)
+        retry = await self._llm.complete([*messages, reask], json_mode=True)
         return AgentDecision.parse(retry.content)
 
     def _on_parse_failure(self, conversation: Conversation) -> StageResult:
@@ -172,11 +194,7 @@ class DialogueStage(ABC):
         )
 
     def _clarifier_message(self) -> str:
-        if self._settings.language == "ru":
-            return "Извините, я не расслышал. Не могли бы вы повторить?"
-        return "Sorry, I didn't quite catch that — could you say it once more?"
+        return get_message(self._settings.language, "clarifier")
 
     def _handoff_message(self) -> str:
-        if self._settings.language == "ru":
-            return "Давайте я передам вас специалисту, который свяжется с вами и всё уточнит."
-        return "Let me take your details and have a specialist follow up with you directly."
+        return get_message(self._settings.language, "handoff")
