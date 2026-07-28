@@ -1,0 +1,72 @@
+{
+  "app_error": {
+    "exception": "BaseAppException",
+    "status_code": 500,
+    "default_detail": "Application error."
+  },
+  "embedding_configuration_error": {
+    "exception": "EmbeddingConfigurationError",
+    "status_code": 500,
+    "default_detail": "Embedding operation failed."
+  },
+  "embedding_error": {
+    "exception": "EmbeddingError",
+    "status_code": 500,
+    "default_detail": "Embedding operation failed."
+  },
+  "embedding_generation_error": {
+    "exception": "EmbeddingGenerationError",
+    "status_code": 502,
+    "default_detail": "Embedding provider request failed."
+  },
+  "embedding_input_error": {
+    "exception": "EmbeddingInputError",
+    "status_code": 422,
+    "default_detail": "Embedding operation failed."
+  },
+  "embedding_model_mismatch": {
+    "exception": "EmbeddingModelMismatchError",
+    "status_code": 500,
+    "default_detail": "Stored embeddings were produced by a different model."
+  },
+  "entity_not_found": {
+    "exception": "EntityNotFoundError",
+    "status_code": 404,
+    "default_detail": "Requested entity was not found."
+  },
+  "idempotency_key_consumed": {
+    "exception": "IdempotencyKeyConsumedError",
+    "status_code": 409,
+    "default_detail": "The booking made with this Idempotency-Key was cancelled. Use a new key to book again."
+  },
+  "idempotency_key_reused": {
+    "exception": "IdempotencyKeyReusedError",
+    "status_code": 409,
+    "default_detail": "This Idempotency-Key was already used for a different booking."
+  },
+  "invalid_api_key": {
+    "exception": "UnauthorizedError",
+    "status_code": 401,
+    "default_detail": "A valid X-API-Key header is required for this operation."
+  },
+  "invalid_input": {
+    "exception": "InvalidInputError",
+    "status_code": 422,
+    "default_detail": "Invalid input."
+  },
+  "rate_limit_exceeded": {
+    "exception": "RateLimitExceededError",
+    "status_code": 429,
+    "default_detail": "Too many requests. Please slow down and retry shortly."
+  },
+  "slot_capacity_exceeded": {
+    "exception": "SlotCapacityExceededError",
+    "status_code": 409,
+    "default_detail": "Party size exceeds the capacity of this slot."
+  },
+  "slot_unavailable": {
+    "exception": "SlotUnavailableError",
+    "status_code": 409,
+    "default_detail": "Booking slot is no longer available."
+  }
+}
