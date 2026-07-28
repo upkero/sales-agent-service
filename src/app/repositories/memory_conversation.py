@@ -21,7 +21,7 @@ write (each save purges what has expired and enforces the cap). No background
 timer: a fully idle process keeps a few expired entries until the next save, which
 is harmless because idle means nothing is growing.
 
-# ponytail: sweep is O(expired) on the OrderedDict front per save — fine at this
+# NOTE: sweep is O(expired) on the OrderedDict front per save — fine at this
 # scale. If write throughput ever makes that show up, move to a DB/Redis store
 # behind this same port (which is the whole reason it is a port).
 """
