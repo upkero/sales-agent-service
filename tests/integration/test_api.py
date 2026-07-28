@@ -147,7 +147,7 @@ async def test_inbound_auth_is_enforced_when_a_key_is_configured(monkeypatch) ->
             right = await client.post(TURN, json={"message": "hi"}, headers={"X-API-Key": "s3cret-inbound-key-value"})
 
         assert missing.status_code == 401
-        assert missing.json()["error_code"] == "unauthorized"
+        assert missing.json()["error_code"] == "invalid_api_key"
         assert wrong.status_code == 401
         assert right.status_code == 200
     finally:
