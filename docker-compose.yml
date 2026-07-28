@@ -1,5 +1,8 @@
 services:
-  api:
+  # Named after the repository, not "api": the portfolio runs five of these side
+  # by side, and three of them used to call their service "api" — a collision the
+  # day any of them share a network.
+  sales-agent-service:
     build: .
     env_file: .env
     environment:
@@ -14,4 +17,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8001:8000"
+      # Host 8002: the portfolio's port map is ops-core-api 8000, rag 8001,
+      # sales 8002, mcp 8003, voice 8080, so all five come up together.
+      - "8002:8000"
