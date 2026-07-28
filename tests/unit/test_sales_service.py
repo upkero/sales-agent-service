@@ -28,11 +28,18 @@ async def _drive(service: SalesService, messages: list[str], conversation_id: st
     return outcomes
 
 
+# Position in the canonical funnel. It lives here, not on SalesStage, because it
+# exists only to express the "at most one jump" property below — no production
+# path ever asks a stage for its index; the transitions are the table in
+# contracts/sales.py.
+_ORDER = {stage: index for index, stage in enumerate(SalesStage)}
+
+
 def _assert_no_illegal_jump(stages: list[SalesStage]) -> None:
     for current, following in zip(stages[:-1], stages[1:], strict=True):
         assert following in ALLOWED_TRANSITIONS[current], f"{current} -> {following} is not a legal move"
         # "At most one jump": never skip more than a single stage in one turn.
-        assert 0 <= following.order - current.order <= 2
+        assert 0 <= _ORDER[following] - _ORDER[current] <= 2
 
 
 async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:

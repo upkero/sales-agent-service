@@ -17,15 +17,6 @@ class SalesStage(StrEnum):
     UPSELL = "upsell"
     CLOSE = "close"
 
-    @property
-    def order(self) -> int:
-        """Position in the canonical funnel. Used only to express the "at most one
-        jump" property as a test, never to drive a transition (the transitions are
-        the table below)."""
-        return _STAGE_ORDER[self]
-
-
-_STAGE_ORDER: dict[SalesStage, int] = {stage: index for index, stage in enumerate(SalesStage)}
 
 # The legal moves. Every stage's route() must return a member of its own row;
 # SalesService rejects anything else as a bug (InvalidStageTransitionError). The
