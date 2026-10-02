@@ -72,3 +72,20 @@ async def test_unknown_service_recovers_by_offering_the_catalogue(
     assert conversation.quote is None
     assert conversation.offered_services  # catalogue fetched for the recovery
     assert result.next_stage is SalesStage.PRESENT  # stays until something prices
+
+
+async def test_a_translated_service_name_does_not_retract_an_existing_quote(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    conversation = _priced_conversation()
+    conversation.offered_services = ("Deep Tissue Massage",)
+    conversation.quote = compute_quote("Deep Tissue Massage", Decimal("120.00"), 3)
+    conversation.price_presented = True
+    reply = control("I hear you.", objection=True, service="глубокий массаж тканей")
+    stage = PresentStage(StubLLM(reply), agent_settings, pricing)
+
+    await stage.handle(conversation)
+
+    assert conversation.service == "Deep Tissue Massage"
+    assert conversation.quote is not None

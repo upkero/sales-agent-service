@@ -68,7 +68,13 @@ class PresentStage(DialogueStage):
         # capture it so prepare() re-quotes next turn.
         service = decision.data.get("service")
         if isinstance(service, str) and service.strip():
-            conversation.service = canonical_service(conversation.offered_services, service.strip())
+            snapped = canonical_service(conversation.offered_services, service.strip())
+            # PRESENT's prompt never lists the catalogue, so a reply in another
+            # language echoes the service in translation ("глубокий массаж").
+            # Adopting that would re-quote it, 404, and retract a price we just
+            # gave. Once a quote exists, only a real catalogue name may replace it.
+            if conversation.quote is None or snapped in conversation.offered_services:
+                conversation.service = snapped
         quantity = coerce_quantity(decision.data.get("quantity"))
         if quantity is not None:
             conversation.quantity = quantity
