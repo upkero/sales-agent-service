@@ -1,3 +1,5 @@
+import asyncio
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -11,6 +13,14 @@ from src.app.interfaces.llm.llm_client import LLMClient
 
 _USAGE_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
 
+# How long a readiness answer is reused. Readiness is polled every ~10 s per
+# caller; each probe is a real request to the LLM provider, whose latency swings
+# from 0.3 s to several. A healthy answer is kept 30 s (a provider outage is then
+# noticed within one k8s-style probe period), a failure only 5 s, so a recovery
+# is seen on the very next poll instead of lingering as "not ready".
+_PING_OK_TTL = 30.0
+_PING_FAILED_TTL = 5.0
+
 
 class OpenAICompatibleLLMClient(LLMClient):
     """One client for every OpenAI-shaped provider (OpenAI, Ollama, others).
@@ -23,6 +33,9 @@ class OpenAICompatibleLLMClient(LLMClient):
     def __init__(self, *, settings: LLMSettings, client: Any) -> None:
         self._settings = settings
         self._client = client
+        self._ping_result: bool | None = None
+        self._ping_expires = 0.0
+        self._ping_lock = asyncio.Lock()
 
     @property
     def model_name(self) -> str:
@@ -46,11 +59,21 @@ class OpenAICompatibleLLMClient(LLMClient):
         return self._build_response(completion)
 
     async def ping(self) -> bool:
-        try:
-            await self._client.models.list()
-            return True
-        except OpenAIError:
-            return False
+        if self._ping_result is not None and time.monotonic() < self._ping_expires:
+            return self._ping_result
+        # One probe at a time: pollers arriving together share its answer instead
+        # of each sending their own request.
+        async with self._ping_lock:
+            if self._ping_result is not None and time.monotonic() < self._ping_expires:
+                return self._ping_result
+            try:
+                await self._client.models.list()
+                healthy = True
+            except OpenAIError:
+                healthy = False
+            self._ping_result = healthy
+            self._ping_expires = time.monotonic() + (_PING_OK_TTL if healthy else _PING_FAILED_TTL)
+            return healthy
 
     async def close(self) -> None:
         close = getattr(self._client, "close", None)
