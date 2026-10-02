@@ -13,15 +13,6 @@ from src.app.interfaces.llm.llm_client import LLMClient
 
 _USAGE_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
 
-# How long a readiness answer is reused. Readiness is polled every ~10 s per
-# caller; each probe is a real request to the LLM provider, whose latency swings
-# from 0.3 s to several. A healthy answer is kept 30 s (a provider outage is then
-# noticed within one k8s-style probe period), a failure only 5 s, so a recovery
-# is seen on the very next poll instead of lingering as "not ready".
-_PING_OK_TTL = 30.0
-_PING_FAILED_TTL = 5.0
-
-
 class OpenAICompatibleLLMClient(LLMClient):
     """One client for every OpenAI-shaped provider (OpenAI, Ollama, others).
 
@@ -36,6 +27,9 @@ class OpenAICompatibleLLMClient(LLMClient):
         self._ping_result: bool | None = None
         self._ping_expires = 0.0
         self._ping_lock = asyncio.Lock()
+        # Readiness is polled every ~10 s per caller and each probe is a real request
+        # to a provider whose latency swings from 0.3 s to several, so an answer is
+        # reused: long when healthy, short when not, so a recovery shows on the next poll.
 
     @property
     def model_name(self) -> str:
@@ -72,7 +66,9 @@ class OpenAICompatibleLLMClient(LLMClient):
             except OpenAIError:
                 healthy = False
             self._ping_result = healthy
-            self._ping_expires = time.monotonic() + (_PING_OK_TTL if healthy else _PING_FAILED_TTL)
+            self._ping_expires = time.monotonic() + (
+                self._settings.ping_ok_ttl_seconds if healthy else self._settings.ping_failed_ttl_seconds
+            )
             return healthy
 
     async def close(self) -> None:

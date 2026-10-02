@@ -38,6 +38,19 @@ class LLMSettings(BaseSettings):
         ge=0,
         description="Maximum provider SDK retries.",
     )
+    ping_ok_ttl_seconds: float = Field(
+        default=30.0,
+        ge=0.0,
+        description=(
+            "How long a healthy readiness probe of the provider is reused. Readiness is polled often "
+            "and each probe is a real request, so this trades detection lag for load. 0 disables."
+        ),
+    )
+    ping_failed_ttl_seconds: float = Field(
+        default=5.0,
+        ge=0.0,
+        description="How long a failed readiness probe is reused. Short, so a recovery shows on the next poll.",
+    )
     temperature: float | None = Field(
         default=0.2,
         ge=0.0,

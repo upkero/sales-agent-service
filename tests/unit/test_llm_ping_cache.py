@@ -18,8 +18,9 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
     return _Clock
 
 
-def _client(sdk: MagicMock) -> OpenAICompatibleLLMClient:
-    return OpenAICompatibleLLMClient(settings=MagicMock(), client=sdk)
+def _client(sdk: MagicMock, ok_ttl: float = 30.0, failed_ttl: float = 5.0) -> OpenAICompatibleLLMClient:
+    settings = MagicMock(ping_ok_ttl_seconds=ok_ttl, ping_failed_ttl_seconds=failed_ttl)
+    return OpenAICompatibleLLMClient(settings=settings, client=sdk)
 
 
 async def test_a_healthy_ping_is_reused_for_thirty_seconds(clock: type[_Clock]) -> None:
@@ -51,3 +52,14 @@ async def test_a_failed_ping_is_reused_for_only_five_seconds(clock: type[_Clock]
     sdk.models.list = AsyncMock()
     clock.now += 2
     assert await client.ping() is True
+
+
+async def test_the_lifetimes_come_from_settings_and_zero_disables_the_cache(clock: type[_Clock]) -> None:
+    sdk = MagicMock()
+    sdk.models.list = AsyncMock()
+    client = _client(sdk, ok_ttl=0.0)
+
+    await client.ping()
+    await client.ping()
+
+    assert sdk.models.list.await_count == 2
