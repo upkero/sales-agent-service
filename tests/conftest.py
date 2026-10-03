@@ -14,10 +14,19 @@ os.environ.setdefault("TURN_RATE_LIMIT_PER_MINUTE", "5")
 from collections.abc import Iterator  # noqa: E402
 
 import pytest  # noqa: E402
+from pydantic_settings import BaseSettings  # noqa: E402
 
+import src.app.core.settings.logging  # noqa: E402,F401 (imported for the loop below)
 from src.app.api.v1.middleware.rate_limit import reset_rate_limit  # noqa: E402
 from src.app.core.settings.agent import SalesAgentSettings  # noqa: E402
 from tests.fakes import FakePricingGateway  # noqa: E402
+
+# A developer's .env must not leak into the tests: an INBOUND_API_KEY there turns
+# every turn into a 401, an AGENT_LANGUAGE=ru changes the replies. Every settings
+# class is imported by now and none has been instantiated yet (the getters are
+# lazy), so dropping the file here leaves only the values set above.
+for _settings_class in BaseSettings.__subclasses__():
+    _settings_class.model_config["env_file"] = None
 
 
 @pytest.fixture(autouse=True)
