@@ -121,6 +121,17 @@ async def test_a_blank_message_is_rejected_before_the_model_is_called() -> None:
     assert llm.calls == []
 
 
+async def test_a_validation_error_does_not_echo_a_huge_input() -> None:
+    async with _client(control("hi")) as client:
+        too_long = await client.post(TURN, json={"message": "x" * 100_000})
+        no_message = await client.post(TURN, json={"conversation_id": "c", "padding": "y" * 100_000})
+
+    for response in (too_long, no_message):
+        assert response.status_code == 422
+        assert len(response.content) < 2_000
+    assert too_long.json()["detail"][0]["input"].startswith("xxx")
+
+
 async def test_the_request_id_is_echoed() -> None:
     async with _client([control("hi")]) as client:
         response = await client.post(TURN, json={"message": "hello"}, headers={"X-Request-ID": "abc-123"})

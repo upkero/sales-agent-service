@@ -1,3 +1,4 @@
+import json
 from collections.abc import Mapping
 from logging import getLogger
 from typing import Any
@@ -73,7 +74,22 @@ async def handle_request_validation_error(request: Request, exc: RequestValidati
         exc.errors(),
         custom_encoder={bytes: lambda raw: raw.decode(errors="replace"), Exception: str},
     )
+    # `input` is the offending value, which can be the whole body: a 2 MB message
+    # came back as a 2 MB 422. The start of it is enough to see what was sent.
+    for error in errors:
+        if isinstance(error, dict) and "input" in error:
+            error["input"] = _truncated(error["input"])
     return _error_response(422, errors, "request_validation_error")
+
+
+_MAX_ECHOED_INPUT = 200
+
+
+def _truncated(value: Any) -> Any:
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    if len(text) <= _MAX_ECHOED_INPUT:
+        return value
+    return text[:_MAX_ECHOED_INPUT] + "…"
 
 
 async def handle_http_exception(request: Request, exc: StarletteHTTPException) -> JSONResponse:
