@@ -5,11 +5,15 @@ to a priced upsell, stages advancing in order with no illegal jump, and the upse
 total equal to what ops-core-api's own arithmetic would produce.
 """
 
+import asyncio
+from collections.abc import Sequence
 from decimal import Decimal
 
 import pytest
 
 from src.app.contracts.conversation import Conversation
+from src.app.contracts.llm.llm_message import LLMMessage
+from src.app.contracts.llm.llm_response import LLMResponse
 from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.dialog import InvalidStageTransitionError
@@ -205,6 +209,29 @@ async def test_a_failed_turn_leaves_the_stored_conversation_untouched() -> None:
     assert stored.stage is SalesStage.QUALIFY  # not advanced to PRESENT
     assert len(stored.messages) == 2  # the failed message is not in the history
     assert (stored.service, stored.quantity) == (None, None)
+
+
+class _SlowLLM(StubLLM):
+    """Yields to the event loop mid-call, the way a real network call does."""
+
+    async def complete(self, messages: Sequence[LLMMessage], *, json_mode: bool = False) -> LLMResponse:
+        await asyncio.sleep(0)
+        return await super().complete(messages, json_mode=json_mode)
+
+
+async def test_concurrent_turns_on_one_conversation_both_land() -> None:
+    service = build_container(_SlowLLM(control("Hello!")), FakePricingGateway()).sales_service
+    first = await service.take_turn(None, "hi")
+
+    await asyncio.gather(
+        service.take_turn(first.conversation_id, "one"),
+        service.take_turn(first.conversation_id, "two"),
+    )
+
+    stored = await service._conversations.get(first.conversation_id)
+    assert stored is not None
+    # Unserialised, both turns copy the same state and the later save drops the other.
+    assert [message.content for message in stored.messages if message.role == "user"] == ["hi", "one", "two"]
 
 
 async def test_an_unknown_id_starts_a_conversation_under_a_server_minted_id() -> None:

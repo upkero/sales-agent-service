@@ -7,10 +7,12 @@ registry entry, and this file never changes. The one thing the orchestrator owns
 is the guard rail: it refuses any transition a stage was not allowed to make.
 """
 
+import asyncio
 from collections.abc import Mapping
 from copy import deepcopy
 from logging import getLogger
 from uuid import uuid4
+from weakref import WeakValueDictionary
 
 from src.app.contracts.conversation import Conversation, Language
 from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
@@ -31,12 +33,33 @@ class SalesService:
         self._conversations = conversations
         self._stages = stages
         self._default_language = default_language
+        # One lock per conversation in flight. Weak values: a lock disappears with
+        # the last turn holding or awaiting it, so the map never outgrows the
+        # number of conversations being talked to right now.
+        self._locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 
     async def take_turn(
         self,
         conversation_id: str | None,
         message: str,
         language: Language | None = None,
+    ) -> TurnOutcome:
+        if not conversation_id:
+            return await self._take_turn(conversation_id, message, language)
+        # Two turns on one conversation (a double-click, a retry racing the first
+        # attempt) each work on their own copy of it; run unserialised, the later
+        # save() would silently drop the other turn. They take turns instead.
+        lock = self._locks.get(conversation_id)
+        if lock is None:
+            lock = self._locks[conversation_id] = asyncio.Lock()
+        async with lock:
+            return await self._take_turn(conversation_id, message, language)
+
+    async def _take_turn(
+        self,
+        conversation_id: str | None,
+        message: str,
+        language: Language | None,
     ) -> TurnOutcome:
         conversation = await self._load_or_start(conversation_id, message)
         if language is not None:
