@@ -109,6 +109,18 @@ async def test_an_empty_message_is_a_typed_validation_error() -> None:
     assert response.json()["error_code"] == "request_validation_error"
 
 
+async def test_a_blank_message_is_rejected_before_the_model_is_called() -> None:
+    llm = StubLLM([])  # any call would exhaust the script and fail the request
+    app = create_app()
+    app.state.container = build_container(llm, FakePricingGateway())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post(TURN, json={"message": " \n\t "})
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "request_validation_error"
+    assert llm.calls == []
+
+
 async def test_the_request_id_is_echoed() -> None:
     async with _client([control("hi")]) as client:
         response = await client.post(TURN, json={"message": "hello"}, headers={"X-Request-ID": "abc-123"})

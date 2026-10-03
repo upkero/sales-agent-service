@@ -1,10 +1,14 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.app.contracts.conversation import Language
 from src.app.contracts.sales import SalesStage, TurnOutcome
 
 
 class TurnRequest(BaseModel):
+    # Stripped before min_length applies, so a message of nothing but spaces is a
+    # 422 here rather than a paid LLM call that greets an empty line.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     message: str = Field(..., min_length=1, max_length=2000, description="The customer's message this turn.")
     conversation_id: str | None = Field(
         default=None,
