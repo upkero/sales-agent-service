@@ -19,4 +19,4 @@ services:
     ports:
       # Host 8002: the portfolio's port map is ops-core-api 8000, rag 8001,
       # sales 8002, mcp 8003, voice 8080, so all five come up together.
-      - "8002:8000"
+      - "127.0.0.1:8002:8000"
