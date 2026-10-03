@@ -10,7 +10,12 @@ from pydantic import SecretStr
 
 from src.app.core.request_id import set_request_id
 from src.app.core.settings.core_api import CoreApiSettings
-from src.app.exceptions.pricing import PricingRateLimitedError, PricingUnavailableError, ServiceNotFoundError
+from src.app.exceptions.pricing import (
+    PricingError,
+    PricingRateLimitedError,
+    PricingUnavailableError,
+    ServiceNotFoundError,
+)
 from src.app.gateways.core_api_pricing import CoreApiPricingGateway, _inject_request_id
 
 _ATTEMPTS = 2
@@ -86,3 +91,17 @@ _QUOTE_BODY = {
     "discount_amount": "0.00",
     "total": "360.00",
 }
+
+
+async def test_an_unmapped_rejection_is_a_502_that_does_not_echo_ops_core() -> None:
+    # A wrong OPS_CORE_API_KEY: ops-core's 401 detail must not reach our caller,
+    # who would read "invalid API key" as a problem with their own key.
+    def respond(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"detail": "Missing or invalid API key.", "error_code": "invalid_api_key"})
+
+    with pytest.raises(PricingError) as caught:
+        await _gateway(httpx.MockTransport(respond)).quote("Deep Tissue Massage", 3)
+
+    assert caught.value.status_code == 502
+    assert caught.value.error_code == "pricing_rejected"
+    assert "API key" not in caught.value.detail

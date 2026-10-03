@@ -11,7 +11,7 @@ from collections.abc import Sequence
 # pricing router). Mirroring the bound here means an implausible number never
 # leaves the process: unbounded, "I want five thousand sessions" reaches the
 # pricing API, comes back as a 422 whose error_code the gateway does not map,
-# and lands in the unmapped-4xx branch as a plain PricingError — a 500 to the
+# and lands in the unmapped-4xx branch as a PricingRejectedError — a 502 to the
 # prospect. An unfilled slot instead just makes the agent ask again, which is
 # what it does for every other unreadable answer.
 _MAX_QUANTITY = 1000

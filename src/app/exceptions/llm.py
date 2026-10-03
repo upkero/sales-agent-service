@@ -16,7 +16,12 @@ class LLMInputError(LLMError, ValueError):
 
 
 class LLMGenerationError(LLMError):
-    """Raised when provider generation fails."""
+    """Raised when provider generation fails.
 
-    error_code = "llm_generation_error"
+    A 502, not a 500: the provider failed, not this service, and the caller's
+    best move (try again shortly) is the same as for any bad gateway. The code
+    matches the sibling services'."""
+
+    status_code = 502
+    error_code = "generation_unavailable"
     default_detail = "The language model is unavailable."

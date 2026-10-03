@@ -6,7 +6,7 @@ through the container, so these tests exercise the plumbing the service unit tes
 cannot see.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
@@ -15,7 +15,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.app.bootstrap.container import ApplicationContainer
+from src.app.contracts.llm.llm_message import LLMMessage
+from src.app.contracts.llm.llm_response import LLMResponse
 from src.app.core.settings.app import get_app_settings
+from src.app.exceptions.llm import LLMGenerationError
 from src.app.interfaces.pricing_gateway import PricingGateway
 from src.main import create_app
 from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, build_container, control
@@ -130,6 +133,21 @@ async def test_a_validation_error_does_not_echo_a_huge_input() -> None:
         assert response.status_code == 422
         assert len(response.content) < 2_000
     assert too_long.json()["detail"][0]["input"].startswith("xxx")
+
+
+class _DownLLM(StubLLM):
+    async def complete(self, messages: Sequence[LLMMessage], *, json_mode: bool = False) -> LLMResponse:
+        raise LLMGenerationError("LLM provider request failed.")
+
+
+async def test_an_llm_outage_is_a_502_not_our_500() -> None:
+    app = create_app()
+    app.state.container = build_container(_DownLLM([]), FakePricingGateway())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.post(TURN, json={"message": "hello"})
+
+    assert response.status_code == 502
+    assert response.json()["error_code"] == "generation_unavailable"
 
 
 async def test_the_request_id_is_echoed() -> None:

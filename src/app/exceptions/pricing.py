@@ -43,6 +43,20 @@ class PricingRateLimitedError(PricingError):
     default_detail = "The pricing service is busy. Please retry shortly."
 
 
+class PricingRejectedError(PricingError):
+    """ops-core-api refused the request with a 4xx this service has no mapping for.
+
+    That means the two services disagree (a wrong OPS_CORE_API_KEY, a changed
+    contract), so it is a bad gateway, not our caller's fault. The detail is fixed:
+    ops-core's own ("Missing or invalid API key.") would read to the caller as a
+    complaint about *their* key.
+    """
+
+    status_code = 502
+    error_code = "pricing_rejected"
+    default_detail = "The pricing service rejected the request."
+
+
 class ServiceNotFoundError(PricingError):
     """The named service is not in the catalogue.
 

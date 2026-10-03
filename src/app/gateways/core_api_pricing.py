@@ -23,6 +23,7 @@ from src.app.core.settings.core_api import CoreApiSettings
 from src.app.exceptions.pricing import (
     PricingError,
     PricingRateLimitedError,
+    PricingRejectedError,
     PricingUnavailableError,
     ServiceNotFoundError,
 )
@@ -174,7 +175,7 @@ class CoreApiPricingGateway(PricingGateway):
             error_code or "<no error_code>",
             extra={"status_code": response.status_code, "error_code": error_code, "detail": detail},
         )
-        return PricingError(detail or "The pricing service rejected the request.")
+        return PricingRejectedError()
 
     @staticmethod
     def _to_quote(item: dict[str, Any]) -> PriceQuote:
