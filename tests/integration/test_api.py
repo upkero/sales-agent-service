@@ -9,6 +9,7 @@ cannot see.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
+from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -185,3 +186,12 @@ async def test_an_unhandled_error_is_a_500_that_still_carries_the_request_id() -
     assert response.status_code == 500
     assert response.json()["error_code"] == "internal_server_error"
     assert response.headers["X-Request-ID"] == "abc-123"
+
+
+async def test_a_malformed_request_id_is_replaced() -> None:
+    async with _client(control("hi")) as client:
+        # Echoed, forwarded upstream and logged, so a markup or oversized id is replaced.
+        for bad in ("attacker-<script>", "r" * 129):
+            response = await client.get("/no-such-route", headers={"X-Request-ID": bad})
+
+            assert UUID(response.headers["X-Request-ID"])
