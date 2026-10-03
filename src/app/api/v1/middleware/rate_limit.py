@@ -52,7 +52,9 @@ def register_rate_limiting(app: FastAPI) -> None:
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if request.url.path.rstrip("/") != _GUARDED_PATH:
+        # Only the POST is a turn. A GET or a malformed method on the same path is
+        # a cheap 405 and must not spend the quota of the client that sent it.
+        if request.method != "POST" or request.url.path.rstrip("/") != _GUARDED_PATH:
             return await call_next(request)
 
         identifier = _client_key(request)

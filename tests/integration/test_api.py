@@ -158,6 +158,29 @@ async def test_a_rate_limited_response_says_when_to_retry() -> None:
     assert "Retry-After" in response.headers
 
 
+async def test_only_a_post_spends_the_turn_quota() -> None:
+    async with _client(control("hi")) as client:
+        wrong_method = [(await client.get(TURN)).status_code for _ in range(6)]
+        post = await client.post(TURN, json={"message": "hi"})
+
+    assert set(wrong_method) == {405}
+    assert post.status_code == 200
+    assert post.headers["X-RateLimit-Remaining"] == "4"  # 5 per minute in tests, one spent
+
+
+async def test_a_browser_can_read_the_rate_limit_and_request_id_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://site.test")
+    get_app_settings.cache_clear()
+    try:
+        async with _client(control("hi")) as client:
+            response = await client.post(TURN, json={"message": "hi"}, headers={"Origin": "http://site.test"})
+    finally:
+        get_app_settings.cache_clear()
+
+    exposed = {name.strip().lower() for name in response.headers["Access-Control-Expose-Headers"].split(",")}
+    assert {"retry-after", "x-ratelimit-remaining", "x-request-id"} <= exposed
+
+
 async def test_health_is_never_rate_limited() -> None:
     """The container runtime polls it; throttling it would restart a healthy service."""
     async with _client(control("hi")) as client:

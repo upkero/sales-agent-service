@@ -68,6 +68,16 @@ def create_app() -> FastAPI:
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Browser JavaScript sees only the CORS-safelisted headers unless told
+        # otherwise; a frontend needs these to back off on a 429 and to quote a
+        # request id in a bug report.
+        expose_headers=[
+            "Retry-After",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+            "X-Request-ID",
+        ],
     )
 
     register_exception_handlers(app)
