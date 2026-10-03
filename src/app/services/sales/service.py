@@ -37,6 +37,16 @@ class SalesService:
         stage = self._stages[current_stage]
         result = await stage.handle(conversation)
 
+        if current_stage is SalesStage.QUALIFY and result.next_stage is SalesStage.PRESENT:
+            # Both slots were just filled. The reply QUALIFY wrote can only acknowledge them
+            # ("anything else I can help with?") and the guest would have to speak again to
+            # hear the price they asked for. So PRESENT takes this same turn and its reply,
+            # which states the price, replaces the acknowledgement.
+            self._guard_transition(conversation, current_stage, result.next_stage)
+            current_stage = SalesStage.PRESENT
+            conversation.stage = current_stage
+            result = await self._stages[current_stage].handle(conversation)
+
         self._guard_transition(conversation, current_stage, result.next_stage)
 
         conversation.add_agent(result.reply)

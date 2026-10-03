@@ -52,6 +52,8 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
     llm = StubLLM(
         [
             control("Hi, I'm Alex from Aurora Wellness. What are you looking for today?"),
+            # One guest message, two model calls: QUALIFY fills the slots, then PRESENT
+            # answers in the same turn, so the price is in the reply the guest hears.
             control("Great — three deep tissue massages.", service="Deep Tissue Massage", quantity=3),
             control("That comes to 360 in total.", objection=False),
             control("Wonderful, glad it works.", objection=False),
@@ -66,7 +68,6 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
         [
             "hi there",
             "I'd like three deep tissue massages",
-            "how much is that?",
             "sounds good",
             "sure, tell me more",
             "yes, let's do six",
@@ -78,11 +79,11 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
         SalesStage.GREETING,
         SalesStage.QUALIFY,
         SalesStage.PRESENT,
-        SalesStage.PRESENT,
         SalesStage.UPSELL,
         SalesStage.UPSELL,
         SalesStage.CLOSE,
     ]
+    assert outcomes[1].reply == "That comes to 360 in total."
     _assert_no_illegal_jump(stages)
     assert outcomes[-1].done is True
 
@@ -112,7 +113,7 @@ async def test_an_objection_is_handled_before_the_upsell() -> None:
 
     outcomes = await _drive(
         service,
-        ["hi", "two physio assessments", "cost?", "hmm, pricey", "okay that helps", "go on", "let's keep it at two"],
+        ["hi", "two physio assessments", "hmm, pricey", "okay that helps", "go on", "let's keep it at two"],
     )
 
     stages = [SalesStage.GREETING, *[outcome.stage for outcome in outcomes]]

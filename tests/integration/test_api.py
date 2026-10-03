@@ -71,7 +71,7 @@ async def test_a_conversation_is_continued_by_its_id() -> None:
     script = [
         control("Hello! What are you after?"),
         control("Three deep tissue massages.", service="Deep Tissue Massage", quantity=3),
-        control("That's 360 in total.", objection=False),
+        control("That's 360 in total.", objection=False),  # the same turn: PRESENT answers right away
     ]
     async with _client(script) as client:
 
@@ -83,11 +83,11 @@ async def test_a_conversation_is_continued_by_its_id() -> None:
         first = await turn("hi")
         cid = first["conversation_id"]
         second = await turn("three deep tissue massages", cid)
-        third = await turn("how much?", cid)
 
+    assert first["stage"] == "qualify"
+    assert second["conversation_id"] == cid
     assert second["stage"] == "present"
-    assert third["stage"] == "present"
-    assert "360" in third["reply"]
+    assert "360" in second["reply"]
 
 
 async def test_an_empty_message_is_a_typed_validation_error() -> None:
