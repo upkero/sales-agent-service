@@ -13,6 +13,7 @@ from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.dialog import InvalidStageTransitionError
+from src.app.prompts import get_prompt
 from src.app.repositories.memory_conversation import InMemoryConversationRepository
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
@@ -58,7 +59,8 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
             control("That comes to 360 in total.", objection=False),
             control("Wonderful, glad it works.", objection=False),
             control("Book six for 648 and save 10% versus 720.", accept=True),
-            control("Perfect — I'll set up six sessions.", accept=True),
+            control("Perfect, six it is. May I have your name and a phone or email?", accept=True),
+            control("Thank you, Dana! The front desk will email you.", name="Dana", contact="dana@example.com"),
         ]
     )
     service = build_container(llm, pricing).sales_service
@@ -71,6 +73,7 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
             "sounds good",
             "sure, tell me more",
             "yes, let's do six",
+            "Dana, dana@example.com",
         ],
     )
 
@@ -82,10 +85,12 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
         SalesStage.UPSELL,
         SalesStage.UPSELL,
         SalesStage.CLOSE,
+        SalesStage.CLOSE,
     ]
     assert outcomes[1].reply == "That comes to 360 in total."
     _assert_no_illegal_jump(stages)
-    assert outcomes[-1].done is True
+    assert outcomes[-2].done is False  # asked for the contact
+    assert outcomes[-1].done is True  # confirmed the order once and closed
 
     # The DoD: the upsell price is the real, discounted total from the pricing
     # service — 6 x 120 = 720, less the 10% volume discount = 648.00.
@@ -97,6 +102,46 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
     # "Yes, let's do six" made the upsell the order the funnel closes on.
     assert conversation.accepted_offer == "upsell"
     assert conversation.quote == conversation.upsell_quote
+
+
+async def test_after_agreeing_the_agent_asks_for_a_contact_once_then_closes() -> None:
+    # The model as seen live: the same line on every turn once the prospect agreed.
+    same_line = control("The front desk will confirm the booking shortly.", accept=False)
+    llm = StubLLM(
+        [
+            control("Hi!"),
+            control("Three, got it.", service="Deep Tissue Massage", quantity=3),
+            control("That comes to 360.00.", objection=False),
+            same_line,  # PRESENT reads the agreement
+            same_line,  # UPSELL makes its offer
+            same_line,  # UPSELL reads the answer
+            same_line,  # CLOSE confirms
+            same_line,  # CLOSE, after the conversation is over
+        ]
+    )
+    service = build_container(llm, FakePricingGateway()).sales_service
+
+    outcomes = await _drive(
+        service,
+        ["hi", "three massages", "OK, sounds good", "go on", "no, three is fine", "Dana, 555-0100", "thanks"],
+    )
+
+    # Agreement -> one ask for the contact -> one closing message -> done.
+    assert [(outcome.stage, outcome.done) for outcome in outcomes[3:]] == [
+        (SalesStage.UPSELL, False),  # the offer
+        (SalesStage.CLOSE, False),  # the answer: asks for a name and a contact
+        (SalesStage.CLOSE, True),  # the confirmation: closed
+        (SalesStage.CLOSE, True),
+    ]
+    system_prompts = [call[0].content for call in llm.calls]
+    assert sum("phone number or email" in prompt for prompt in system_prompts) == 1
+    assert sum("Their order:" in prompt for prompt in system_prompts) == 1
+    # Not an instruction on every turn any more, which is what made the line repeat.
+    assert "front desk" not in get_prompt("persona").text
+    conversation = await service._conversations.get(outcomes[-1].conversation_id)
+    assert conversation is not None
+    assert conversation.accepted_offer == "base"
+    assert conversation.closed is True
 
 
 async def test_an_objection_is_handled_before_the_upsell() -> None:

@@ -73,6 +73,7 @@ class SalesService:
             reply=result.reply,
             stage=result.next_stage,
             handoff=result.handoff,
+            done=conversation.closed,
         )
 
     async def _load_or_start(self, conversation_id: str | None, first_message: str) -> Conversation:

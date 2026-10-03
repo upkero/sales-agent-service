@@ -60,6 +60,12 @@ class Conversation:
     # confirms and what the front desk would act on.
     accepted_offer: Literal["base", "upsell"] | None = None
 
+    # CLOSE: who to confirm the booking with, as the prospect gave it, and whether
+    # the order has been confirmed — the conversation is done from then on.
+    customer_name: str | None = None
+    customer_contact: str | None = None
+    closed: bool = False
+
     # Robustness bookkeeping: how many turns in a row the model returned control
     # output the stage could not parse. Bounded escalation reads this.
     consecutive_parse_failures: int = 0

@@ -15,6 +15,7 @@ logger = getLogger(__name__)
 
 _UPSELL = get_prompt("stage_upsell")
 _AFFIRM = get_prompt("stage_upsell_affirm")
+_ANSWER = get_prompt("stage_upsell_answer")
 
 
 class UpsellStage(DialogueStage):
@@ -23,11 +24,11 @@ class UpsellStage(DialogueStage):
     The stage decides *that* it upsells; the `SalesTactic` (Strategy) decides
     *which* quantity — here, the next volume tier ops-core-api rewards. The offer
     price is a second, live pricing call, so the number the prospect hears is the
-    real discounted total, not an estimate. Two turns: make the offer, then close
-    once they respond either way."""
+    real discounted total, not an estimate. Two turns: make the offer, then read
+    the answer and ask for a name and a contact, after which CLOSE confirms."""
 
     stage: ClassVar[SalesStage] = SalesStage.UPSELL
-    prompts: ClassVar[tuple[Prompt, ...]] = (_UPSELL, _AFFIRM)
+    prompts: ClassVar[tuple[Prompt, ...]] = (_UPSELL, _AFFIRM, _ANSWER)
     takes_order_changes: ClassVar[bool] = True
 
     def __init__(
@@ -54,6 +55,9 @@ class UpsellStage(DialogueStage):
         conversation.upsell_quote = await self._pricing.quote(conversation.service, target)
 
     def directive(self, conversation: Conversation) -> str:
+        if conversation.upsell_offered:
+            # The answer turn: take their choice and ask, once, who to confirm it with.
+            return _ANSWER.text
         if conversation.upsell_quote is None:
             return _AFFIRM.text
         return _UPSELL.render(

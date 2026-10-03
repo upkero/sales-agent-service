@@ -57,13 +57,13 @@ class StageResult:
 class TurnOutcome:
     """The result of one turn as the caller cares about it: what to say, which
     stage the conversation is now in, and the id needed to continue it. The
-    service builds this so the router never has to reach into the conversation."""
+    service builds this so the router never has to reach into the conversation.
+
+    `done` is not "the stage is CLOSE": CLOSE first asks for a name and a
+    contact, and the conversation is done once it has confirmed the order."""
 
     conversation_id: str
     reply: str
     stage: SalesStage
     handoff: bool
-
-    @property
-    def done(self) -> bool:
-        return self.stage is SalesStage.CLOSE
+    done: bool = False

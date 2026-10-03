@@ -1,3 +1,6 @@
-The deal is done or the customer is ready to decide. Their order: {order_facts} Thank
-them warmly, confirm the order and the next concrete step (how to book or who will
-follow up), and close on a friendly note. Do not reopen the pitch.
+The customer has just answered your request for their name and contact. Their order:
+{order_facts} In one message: thank them, by name if they gave one; confirm the order and its
+total; and say the front desk will contact them to confirm the booking, or, if they gave no
+contact, that they can reach the front desk to book. Do not ask anything else and do not
+reopen the pitch. In "data", set "name" and "contact" (their phone or email) to what they
+gave, else null.

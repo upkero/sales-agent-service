@@ -139,8 +139,11 @@ curl -s localhost:8002/api/v1/turn \
 
 Keep going and, at the `present`/`upsell` stages, the reply carries a real total
 computed by `ops-core-api` (e.g. six sessions at a 10% volume discount). The
-`stage` field is what a frontend uses to light up a progress bar; `done` turns true
-at `close`; `handoff` turns true if the agent escalates to a human (see below).
+`stage` field is what a frontend uses to light up a progress bar. Once the customer
+has answered the upsell, the agent asks once for a name and a phone or email and
+moves to `close`; their next message gets a single confirmation of the order and
+its total, and `done` turns true. `handoff` turns true if the agent escalates to a
+human (see below).
 
 ## Tests
 
@@ -300,6 +303,9 @@ uv run mypy .
 - Сломанная модель не может «заклинить» диалог: при повторно невалидном JSON агент
   один раз переспрашивает, а затем — ограниченно — эскалирует на человека
   (`handoff: true`), не зацикливаясь.
+- После ответа на апселл агент один раз просит имя и телефон или email и переходит в
+  `close`; следующее сообщение клиента получает одно итоговое подтверждение заказа с
+  суммой, и `done` становится `true`.
 - Деньги — `Decimal` от начала до конца, без float.
 - Модель не считает сама. «А давайте восемь» пересчитывается в `ops-core-api` в том
   же ходе, до генерации ответа, и модель получает готовый итог. Каждый ответ затем
