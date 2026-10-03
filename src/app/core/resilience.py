@@ -15,7 +15,6 @@ from tenacity import (
     AsyncRetrying,
     RetryCallState,
     retry_if_exception_type,
-    stop_after_attempt,
     wait_exponential_jitter,
 )
 
@@ -23,6 +22,11 @@ logger = getLogger(__name__)
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
+
+# The longest upstream Retry-After worth sleeping on. The sleep happens inside a
+# client's request; past this it is kinder to fail now and pass the wait on, so
+# the caller answers with its own 429 and the upstream's Retry-After.
+MAX_HONOURED_RETRY_AFTER_SECONDS = 5.0
 
 
 def _log_attempt(state: RetryCallState) -> None:
@@ -76,6 +80,19 @@ def _wait_honouring_retry_after(max_wait_seconds: float) -> Callable[[RetryCallS
     return _wait
 
 
+def _stop(attempts: int) -> Callable[[RetryCallState], bool]:
+    """Stop after `attempts` tries, or at once if the upstream asks for too long a wait."""
+
+    def _should_stop(state: RetryCallState) -> bool:
+        if state.attempt_number >= attempts:
+            return True
+        exception = state.outcome.exception() if state.outcome else None
+        retry_after = _retry_after_seconds(exception) if exception is not None else None
+        return retry_after is not None and retry_after > MAX_HONOURED_RETRY_AFTER_SECONDS
+
+    return _should_stop
+
+
 def retry_async(
     *,
     attempts: int,
@@ -94,12 +111,15 @@ def retry_async(
 
     `attempts` is the total number of tries including the first, not the number
     of repeats — the same meaning `OPS_CORE_MAX_ATTEMPTS` carries in settings.
+
+    A `Retry-After` above `MAX_HONOURED_RETRY_AFTER_SECONDS` ends the retries
+    at once and re-raises, so the caller's own 429 handling passes it on.
     """
 
     def decorator(func: Callable[_P, Awaitable[_R]]) -> Callable[_P, Awaitable[_R]]:
         async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
             retrying = AsyncRetrying(
-                stop=stop_after_attempt(attempts),
+                stop=_stop(attempts),
                 wait=_wait_honouring_retry_after(max_wait_seconds),
                 retry=retry_if_exception_type(retry_on),
                 before_sleep=_log_attempt,
