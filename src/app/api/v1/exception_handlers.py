@@ -3,10 +3,12 @@ from logging import getLogger
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.app.core.request_id import get_request_id
 from src.app.exceptions.base import BaseAppException
 
 logger = getLogger(__name__)
@@ -63,12 +65,14 @@ async def handle_app_exception(request: Request, exc: BaseAppException) -> JSONR
 
 async def handle_request_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     logger.warning("Request validation error on %s %s", request.method, request.url.path)
-    errors = exc.errors()
-    for err in errors:
-        # Pydantic sometimes tucks a raw exception into ctx; JSONResponse cannot
-        # serialise it, so stringify before it reaches the encoder.
-        if (ctx := err.get("ctx")) and isinstance(ctx.get("error"), Exception):
-            ctx["error"] = str(ctx["error"])
+    # The errors are not plain JSON: a non-JSON body (a form post, say) leaves the
+    # raw bytes in `input`, and pydantic tucks exception objects into `ctx`.
+    # jsonable_encoder is what FastAPI's own handler uses; the two custom encoders
+    # keep undecodable bytes and exception messages from turning a 422 into a 500.
+    errors = jsonable_encoder(
+        exc.errors(),
+        custom_encoder={bytes: lambda raw: raw.decode(errors="replace"), Exception: str},
+    )
     return _error_response(422, errors, "request_validation_error")
 
 
@@ -78,7 +82,12 @@ async def handle_http_exception(request: Request, exc: StarletteHTTPException) -
 
 async def handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
-    return _error_response(500, "Internal server error", "internal_server_error")
+    # Starlette runs this handler in ServerErrorMiddleware, outside every other
+    # middleware, so the request-id middleware never sees this response. The id it
+    # set is still in the context (same task), so the header is added here.
+    request_id = get_request_id()
+    headers = {"X-Request-ID": request_id} if request_id else None
+    return _error_response(500, "Internal server error", "internal_server_error", headers=headers)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
