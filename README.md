@@ -98,7 +98,7 @@ once, never in one.
 ```bash
 cp .env.example .env
 uv sync
-uv run uvicorn src.main:app --reload      # http://localhost:8000
+uv run uvicorn src.main:app --reload --port 8002   # http://localhost:8002
 ```
 
 ### Talk to it
@@ -108,7 +108,7 @@ pass the id you get back to continue.
 
 ```bash
 # First turn — the agent greets and the stage advances to "qualify"
-curl -s localhost:8000/api/v1/turn \
+curl -s localhost:8002/api/v1/turn \
   -H 'Content-Type: application/json' \
   -d '{"message": "hi, I keep getting knots in my shoulders"}'
 ```
@@ -125,7 +125,7 @@ curl -s localhost:8000/api/v1/turn \
 
 ```bash
 # Continue — reuse the conversation_id you were given
-curl -s localhost:8000/api/v1/turn \
+curl -s localhost:8002/api/v1/turn \
   -H 'Content-Type: application/json' \
   -d '{"message": "maybe three deep tissue massages", "conversation_id": "0b0f…"}'
 ```
