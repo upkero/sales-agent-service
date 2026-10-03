@@ -55,6 +55,11 @@ class Conversation:
     upsell_quote: PriceQuote | None = None
     upsell_offered: bool = False
 
+    # What the prospect took when they answered the upsell: the larger package, or
+    # the plan they had. `quote` is then the accepted order, which is what CLOSE
+    # confirms and what the front desk would act on.
+    accepted_offer: Literal["base", "upsell"] | None = None
+
     # Robustness bookkeeping: how many turns in a row the model returned control
     # output the stage could not parse. Bounded escalation reads this.
     consecutive_parse_failures: int = 0

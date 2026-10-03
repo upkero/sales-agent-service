@@ -1,3 +1,4 @@
+from logging import getLogger
 from typing import ClassVar
 
 from src.app.contracts.conversation import Conversation
@@ -9,6 +10,8 @@ from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.sales.tactics import SalesTactic
+
+logger = getLogger(__name__)
 
 _UPSELL = get_prompt("stage_upsell")
 _AFFIRM = get_prompt("stage_upsell_affirm")
@@ -60,6 +63,32 @@ class UpsellStage(DialogueStage):
 
     def data_spec(self) -> str:
         return '"accept": boolean'
+
+    def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
+        # Only the answer turn decides; on the offer turn nothing has been offered
+        # yet, and a changed order goes back to PRESENT undecided.
+        if not conversation.upsell_offered or conversation.quote_is_stale:
+            return
+        offer = conversation.upsell_quote
+        # "Yes, six" is an acceptance even when the model forgets the flag: the
+        # order-change step has already put the offered quantity in the slots.
+        if offer is not None and (decision.flag("accept") or conversation.quantity == offer.quantity):
+            conversation.quote = offer
+            conversation.quantity = offer.quantity
+            conversation.accepted_offer = "upsell"
+        else:
+            conversation.accepted_offer = "base"
+        quote = conversation.quote
+        logger.info(
+            "Offer accepted",
+            extra={
+                "conversation_id": conversation.id,
+                "accepted_offer": conversation.accepted_offer,
+                "service": quote.service_name if quote else None,
+                "quantity": quote.quantity if quote else None,
+                "total": str(quote.total) if quote else None,
+            },
+        )
 
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
         if conversation.quote_is_stale:

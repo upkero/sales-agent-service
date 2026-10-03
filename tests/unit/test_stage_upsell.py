@@ -54,6 +54,70 @@ async def test_closes_after_the_prospect_responds_to_the_offer(
     assert result.next_stage is SalesStage.CLOSE
 
 
+def _answering_conversation() -> Conversation:
+    conversation = _ready_conversation(quantity=3)
+    conversation.upsell_quote = compute_quote("Deep Tissue Massage", Decimal("120.00"), 6)
+    conversation.upsell_offered = True
+    return conversation
+
+
+async def test_an_accepted_upsell_becomes_the_order(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    conversation = _answering_conversation()
+    stage = UpsellStage(StubLLM(control("Six it is.", accept=True)), agent_settings, pricing, VolumeDiscountTactic())
+
+    await stage.handle(conversation)
+
+    assert conversation.accepted_offer == "upsell"
+    assert conversation.quantity == 6
+    assert conversation.quote is not None
+    assert conversation.quote.total == Decimal("648.00")
+
+
+async def test_naming_the_offered_quantity_accepts_it_even_without_the_flag(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    conversation = _answering_conversation()
+    stage = UpsellStage(StubLLM(control("Six it is.", quantity=6)), agent_settings, pricing, VolumeDiscountTactic())
+
+    await stage.handle(conversation)
+
+    assert conversation.accepted_offer == "upsell"
+    assert conversation.quote is not None and conversation.quote.quantity == 6
+
+
+async def test_a_declined_upsell_keeps_the_base_offer(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    conversation = _answering_conversation()
+    stage = UpsellStage(StubLLM(control("Three it is.", accept=False)), agent_settings, pricing, VolumeDiscountTactic())
+
+    await stage.handle(conversation)
+
+    assert conversation.accepted_offer == "base"
+    assert conversation.quantity == 3
+    assert conversation.quote is not None and conversation.quote.total == Decimal("360.00")
+
+
+async def test_the_offer_turn_records_no_answer(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    # accept=True on the turn the offer is made is the model jumping ahead.
+    llm = StubLLM(control("Six for 648.00?", accept=True))
+    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
+    conversation = _ready_conversation(quantity=3)
+
+    await stage.handle(conversation)
+
+    assert conversation.accepted_offer is None
+    assert conversation.quantity == 3
+
+
 async def test_at_the_top_tier_there_is_nothing_to_upsell(
     agent_settings: SalesAgentSettings,
     pricing: FakePricingGateway,

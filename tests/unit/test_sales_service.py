@@ -94,6 +94,9 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
     assert conversation is not None
     assert conversation.upsell_quote is not None
     assert conversation.upsell_quote.total == Decimal("648.00")
+    # "Yes, let's do six" made the upsell the order the funnel closes on.
+    assert conversation.accepted_offer == "upsell"
+    assert conversation.quote == conversation.upsell_quote
 
 
 async def test_an_objection_is_handled_before_the_upsell() -> None:

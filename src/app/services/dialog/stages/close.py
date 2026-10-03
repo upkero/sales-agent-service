@@ -20,7 +20,10 @@ class CloseStage(DialogueStage):
     prompts: ClassVar[tuple[Prompt, ...]] = (_CLOSE,)
 
     def directive(self, conversation: Conversation) -> str:
-        return _CLOSE.text
+        # The accepted order (see UpsellStage), so the confirmation names the
+        # package and its real total instead of reconstructing them from the chat.
+        order_facts = self._describe_quote(conversation.quote) if conversation.quote else ""
+        return _CLOSE.render(order_facts=order_facts)
 
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
         return SalesStage.CLOSE
