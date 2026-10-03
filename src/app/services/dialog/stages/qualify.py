@@ -72,7 +72,9 @@ class QualifyStage(DialogueStage):
     @staticmethod
     def _known_slots(conversation: Conversation) -> str:
         known: list[str] = []
-        if conversation.service:
+        # Only a catalogue name: anything else is the customer's own wording, which
+        # stays in the user role (the history) rather than the system prompt.
+        if conversation.service in conversation.offered_services:
             known.append(f"they want {conversation.service}")
         if conversation.quantity is not None:
             known.append(f"quantity {conversation.quantity}")

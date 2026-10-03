@@ -58,8 +58,10 @@ class PresentStage(DialogueStage):
 
     def directive(self, conversation: Conversation) -> str:
         if conversation.quote is None:
+            # The name they asked for is not repeated here: it is their words as the
+            # model read them, and the system role is no place for those. The model
+            # sees what they asked for in the history, as a user message.
             return _UNKNOWN_SERVICE.render(
-                requested_service=conversation.service,
                 catalogue=", ".join(conversation.offered_services) or "our listed services",
             )
         return _PRESENT.render(quote_facts=self._describe_quote(conversation.quote))
