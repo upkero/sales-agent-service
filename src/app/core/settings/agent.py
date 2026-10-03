@@ -29,7 +29,10 @@ class SalesAgentSettings(BaseSettings):
     )
     language: AgentLanguage = Field(
         default="en",
-        description="Conversation language. Drives the persona instructions.",
+        description=(
+            "Fallback conversation language. A turn's `language` field wins, then the "
+            "language of the first message; this applies only when neither says."
+        ),
     )
     history_limit: int = Field(
         default=20,

@@ -92,6 +92,15 @@ async def test_a_conversation_is_continued_by_its_id() -> None:
     assert "360" in second["reply"]
 
 
+async def test_the_reply_language_can_be_requested() -> None:
+    async with _client(control("Здравствуйте!")) as client:
+        ok = await client.post(TURN, json={"message": "hello", "language": "ru"})
+        unsupported = await client.post(TURN, json={"message": "hello", "language": "de"})
+
+    assert ok.status_code == 200
+    assert unsupported.status_code == 422
+
+
 async def test_an_empty_message_is_a_typed_validation_error() -> None:
     async with _client(control("hi")) as client:
         response = await client.post(TURN, json={"message": ""})

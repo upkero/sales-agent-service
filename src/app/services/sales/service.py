@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from logging import getLogger
 from uuid import uuid4
 
-from src.app.contracts.conversation import Conversation
+from src.app.contracts.conversation import Conversation, Language
 from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
 from src.app.exceptions.dialog import InvalidStageTransitionError
 from src.app.interfaces.conversation_repository import ConversationRepository
@@ -25,12 +25,23 @@ class SalesService:
         self,
         conversations: ConversationRepository,
         stages: Mapping[SalesStage, DialogueStage],
+        default_language: Language = "en",
     ) -> None:
         self._conversations = conversations
         self._stages = stages
+        self._default_language = default_language
 
-    async def take_turn(self, conversation_id: str | None, message: str) -> TurnOutcome:
-        conversation = await self._load_or_start(conversation_id)
+    async def take_turn(
+        self,
+        conversation_id: str | None,
+        message: str,
+        language: Language | None = None,
+    ) -> TurnOutcome:
+        conversation = await self._load_or_start(conversation_id, message)
+        if language is not None:
+            # The caller knows (the site's language switch); that beats any guess,
+            # for this turn and every later one that does not say otherwise.
+            conversation.language = language
         conversation.add_user(message)
 
         current_stage = conversation.stage
@@ -64,7 +75,7 @@ class SalesService:
             handoff=result.handoff,
         )
 
-    async def _load_or_start(self, conversation_id: str | None) -> Conversation:
+    async def _load_or_start(self, conversation_id: str | None, first_message: str) -> Conversation:
         if conversation_id:
             existing = await self._conversations.get(conversation_id)
             if existing is not None:
@@ -77,7 +88,21 @@ class SalesService:
         # caller's id here instead would let two clients that both sent "1" land
         # in the same conversation, which nothing about "continue my dialogue"
         # needs: that feature wants a *lookup*, not a create.
-        return Conversation(id=str(uuid4()))
+        return Conversation(id=str(uuid4()), language=self._language_of(first_message))
+
+    def _language_of(self, message: str) -> Language:
+        """Any Cyrillic letter means Russian, any other letter English. Only a
+        message with no letters at all ("👋", "3") leaves it to AGENT_LANGUAGE.
+
+        Settled once, on the first message: "hello" from a visitor to an English
+        page is English even when the service is configured for Russian, and a
+        Russian name typed later ("Алекс, ok") does not switch the conversation.
+        """
+        if any("Ѐ" <= char <= "ӿ" for char in message):
+            return "ru"
+        if any(char.isalpha() for char in message):
+            return "en"
+        return self._default_language
 
     @staticmethod
     def _guard_transition(conversation: Conversation, current: SalesStage, requested: SalesStage) -> None:

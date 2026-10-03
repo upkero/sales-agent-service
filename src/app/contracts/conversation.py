@@ -14,6 +14,7 @@ from src.app.contracts.pricing import PriceQuote
 from src.app.contracts.sales import SalesStage
 
 MessageRole = Literal["user", "assistant"]
+Language = Literal["en", "ru"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,10 @@ class Conversation:
     id: str
     stage: SalesStage = SalesStage.GREETING
     messages: list[ConversationMessage] = field(default_factory=list)
+
+    # The language every reply and every fixed message is in, settled on the first
+    # turn (see SalesService) so the agent does not switch mid-conversation.
+    language: Language = "en"
 
     # The real catalogue surfaced to this prospect, fetched once from ops-core-api
     # to ground the model's service extraction in names that actually price.

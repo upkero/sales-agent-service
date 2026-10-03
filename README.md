@@ -108,7 +108,10 @@ uv run uvicorn src.main:app --reload --port 8002   # http://localhost:8002
 ### Talk to it
 
 The endpoint is `POST /api/v1/turn`. Omit `conversation_id` on the first turn;
-pass the id you get back to continue.
+pass the id you get back to continue. The optional `language` (`"en"` or `"ru"`)
+sets the reply language for the whole conversation; without it the language of
+the first message is used, and `AGENT_LANGUAGE` only when that message has no
+letters at all.
 
 ```bash
 # First turn — the agent greets and the stage advances to "qualify"
@@ -259,8 +262,10 @@ uv run uvicorn src.main:app --reload
 ```
 
 Эндпоинт — `POST /api/v1/turn`. На первом ходе `conversation_id` не указывается;
-полученный id передаётся дальше, чтобы продолжить диалог. Пример запроса и ответа —
-в английской части выше.
+полученный id передаётся дальше, чтобы продолжить диалог. Необязательное поле
+`language` (`"en"` или `"ru"`) задаёт язык ответов на весь разговор; без него
+берётся язык первого сообщения, а `AGENT_LANGUAGE` — только если в нём нет букв.
+Пример запроса и ответа — в английской части выше.
 
 ### Тесты
 

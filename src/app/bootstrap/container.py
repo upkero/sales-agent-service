@@ -76,7 +76,11 @@ class ApplicationContainer:
 
     @cached_property
     def sales_service(self) -> SalesService:
-        return SalesService(self.conversation_repository, self.stages)
+        return SalesService(
+            self.conversation_repository,
+            self.stages,
+            default_language=get_agent_settings().language,
+        )
 
     async def close(self) -> None:
         """Close whatever was actually built, once each.

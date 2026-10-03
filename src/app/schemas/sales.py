@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+from src.app.contracts.conversation import Language
 from src.app.contracts.sales import SalesStage, TurnOutcome
 
 
@@ -9,6 +10,13 @@ class TurnRequest(BaseModel):
         default=None,
         max_length=100,
         description="Omit on the first turn; pass the id returned previously to continue a conversation.",
+    )
+    language: Language | None = Field(
+        default=None,
+        description=(
+            "Reply language, kept for the rest of the conversation. Omit it and the "
+            "language of the first message is used (Cyrillic means Russian)."
+        ),
     )
 
 

@@ -139,14 +139,14 @@ class DialogueStage(ABC):
         # directive cannot bury either. Mirrors the ordering discipline in the
         # sibling voice-agent's dialog flow.
         order_change = _ORDER_CHANGE.text if self.takes_order_changes else ""
-        sections = (self._persona(), self.directive(conversation), order_change, self._output_contract())
+        sections = (self._persona(conversation), self.directive(conversation), order_change, self._output_contract())
         return "\n\n".join(section.strip() for section in sections if section.strip())
 
-    def _persona(self) -> str:
+    def _persona(self, conversation: Conversation) -> str:
         return _PERSONA.render(
             agent_name=self._settings.name,
             company=self._settings.company,
-            reply_language=_LANGUAGE_NAMES.get(self._settings.language, "English"),
+            reply_language=_LANGUAGE_NAMES[conversation.language],
         )
 
     def _output_contract(self) -> str:
@@ -179,7 +179,7 @@ class DialogueStage(ABC):
                 extra={"conversation_id": conversation.id, "stage": self.stage.value},
             )
             return StageResult(
-                reply=self._handoff_message(),
+                reply=get_message(conversation.language, "handoff"),
                 current_stage=self.stage,
                 next_stage=self.stage,
                 handoff=True,
@@ -193,7 +193,11 @@ class DialogueStage(ABC):
                 "consecutive_parse_failures": conversation.consecutive_parse_failures,
             },
         )
-        return StageResult(reply=self._clarifier_message(), current_stage=self.stage, next_stage=self.stage)
+        return StageResult(
+            reply=get_message(conversation.language, "clarifier"),
+            current_stage=self.stage,
+            next_stage=self.stage,
+        )
 
     def _quoted_only(self, conversation: Conversation, reply: str) -> str:
         """The reply, unless it states an amount no quote in hand contains.
@@ -215,8 +219,8 @@ class DialogueStage(ABC):
         )
         quote = conversation.quote
         if quote is None:
-            return get_message(self._settings.language, "price_pending")
-        return get_message(self._settings.language, "quote_total").format(
+            return get_message(conversation.language, "price_pending")
+        return get_message(conversation.language, "quote_total").format(
             quantity=quote.quantity, service=quote.service_name, total=quote.total
         )
 
@@ -254,9 +258,3 @@ class DialogueStage(ABC):
             f"{quote.quantity} x {quote.service_name} at {quote.unit_price} each, "
             f"for a total of {quote.total}. No volume discount applies at this quantity."
         )
-
-    def _clarifier_message(self) -> str:
-        return get_message(self._settings.language, "clarifier")
-
-    def _handoff_message(self) -> str:
-        return get_message(self._settings.language, "handoff")

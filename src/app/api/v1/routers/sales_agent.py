@@ -19,5 +19,5 @@ async def take_turn(body: TurnRequest, service: SalesServiceDep) -> TurnResponse
     domain terms, and the outcome is mapped back to the response schema. The
     router knows nothing about stages, prompts or pricing.
     """
-    outcome = await service.take_turn(body.conversation_id, body.message)
+    outcome = await service.take_turn(body.conversation_id, body.message, body.language)
     return TurnResponse.from_outcome(outcome)
