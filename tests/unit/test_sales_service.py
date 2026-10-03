@@ -13,12 +13,13 @@ from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.dialog import InvalidStageTransitionError
+from src.app.exceptions.pricing import PricingUnavailableError
 from src.app.prompts import get_prompt
 from src.app.repositories.memory_conversation import InMemoryConversationRepository
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.sales.service import SalesService
-from tests.fakes import FakePricingGateway, StubLLM, build_container, control
+from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, build_container, control
 
 
 async def _drive(
@@ -183,6 +184,27 @@ async def test_repeated_unparseable_output_escalates_to_a_bounded_handoff() -> N
     second = await service.take_turn(first.conversation_id, "hello again")
     assert second.handoff is True  # bounded: escalates instead of looping forever
     assert second.stage is SalesStage.GREETING
+
+
+async def test_a_failed_turn_leaves_the_stored_conversation_untouched() -> None:
+    llm = StubLLM(
+        [
+            control("Hi! What can I help with?"),
+            control("Three, got it.", service="Deep Tissue Massage", quantity=3),
+        ]
+    )
+    service = build_container(llm, UnavailablePricingGateway()).sales_service
+    first = await service.take_turn(None, "hi")
+
+    # QUALIFY fills the slots, then PRESENT cannot reach the price list.
+    with pytest.raises(PricingUnavailableError):
+        await service.take_turn(first.conversation_id, "three deep tissue massages")
+
+    stored = await service._conversations.get(first.conversation_id)
+    assert stored is not None
+    assert stored.stage is SalesStage.QUALIFY  # not advanced to PRESENT
+    assert len(stored.messages) == 2  # the failed message is not in the history
+    assert (stored.service, stored.quantity) == (None, None)
 
 
 async def test_an_unknown_id_starts_a_conversation_under_a_server_minted_id() -> None:

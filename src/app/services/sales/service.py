@@ -8,6 +8,7 @@ is the guard rail: it refuses any transition a stage was not allowed to make.
 """
 
 from collections.abc import Mapping
+from copy import deepcopy
 from logging import getLogger
 from uuid import uuid4
 
@@ -80,7 +81,12 @@ class SalesService:
         if conversation_id:
             existing = await self._conversations.get(conversation_id)
             if existing is not None:
-                return existing
+                # A copy, so a turn is all or nothing: the stages mutate it freely
+                # and only save() at the end publishes it. Should the LLM or
+                # ops-core-api fail halfway, the stored conversation keeps neither
+                # the message nor a stage it advanced to, and a client that resends
+                # after the 429/503 does not get its message in the history twice.
+                return deepcopy(existing)
         # No id, or an id we have never seen: begin a fresh conversation under an
         # id we mint. A known id continues that conversation; anything else starts
         # a new one and gets told its real id back. The id is the caller's handle
