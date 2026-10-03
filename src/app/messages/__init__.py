@@ -7,18 +7,23 @@ opposite — nobody paraphrases them, the customer receives them character for
 character — so they have to exist once per language. Keeping them out of
 `prompts/` is what stops the "prompts are English" rule breaking on its first day.
 
-They are also the two things the agent says when the model is not usable at all
-(unparseable control output), so they cannot come from the model by definition.
+They are what the agent says when the model's own reply is not usable: unparseable
+control output, or a reply that states a price no quote contains. So they cannot
+come from the model by definition.
 """
 
 _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
         "clarifier": "Sorry, I didn't quite catch that — could you say it once more?",
         "handoff": "Let me take your details and have a specialist follow up with you directly.",
+        "price_pending": "I'll check the exact price as soon as I know the service and how many sessions you'd like.",
+        "quote_total": "For {quantity} × {service} the total is {total}.",
     },
     "ru": {
         "clarifier": "Извините, я не расслышал. Не могли бы вы повторить?",
         "handoff": "Давайте я передам вас специалисту, который свяжется с вами и всё уточнит.",
+        "price_pending": "Я уточню точную цену, как только буду знать услугу и количество сеансов.",
+        "quote_total": "{quantity} × {service}: итого {total}.",
     },
 }
 

@@ -20,6 +20,7 @@ class ObjectionHandlingStage(DialogueStage):
 
     stage: ClassVar[SalesStage] = SalesStage.OBJECTION_HANDLING
     prompts: ClassVar[tuple[Prompt, ...]] = (_OBJECTION,)
+    takes_order_changes: ClassVar[bool] = True
 
     def directive(self, conversation: Conversation) -> str:
         quote_facts = self._describe_quote(conversation.quote) if conversation.quote else ""
@@ -29,4 +30,7 @@ class ObjectionHandlingStage(DialogueStage):
         return '"resolved": boolean'
 
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
+        if conversation.quote_is_stale:
+            # "What if I took eight?" is answered with ops-core's price for eight.
+            return SalesStage.PRESENT
         return SalesStage.UPSELL if decision.flag("resolved") else SalesStage.OBJECTION_HANDLING

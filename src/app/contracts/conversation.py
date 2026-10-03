@@ -72,3 +72,15 @@ class Conversation:
     def is_qualified(self) -> bool:
         """Both facts needed to fetch a price are known."""
         return bool(self.service) and self.quantity is not None
+
+    @property
+    def quote_is_stale(self) -> bool:
+        """The prospect wants something no quote in hand prices: the order has to
+        go back to ops-core-api before anyone states a number for it."""
+        if self.service is None or self.quantity is None:
+            return False
+        service = self.service.lower()
+        return not any(
+            quote is not None and quote.service_name.lower() == service and quote.quantity == self.quantity
+            for quote in (self.quote, self.upsell_quote)
+        )

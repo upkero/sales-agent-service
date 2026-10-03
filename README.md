@@ -26,6 +26,8 @@ stateDiagram-v2
     present --> upsell: no objection (the one sanctioned skip)
     objection_handling --> upsell
     upsell --> close
+    objection_handling --> present: order changed
+    upsell --> present: order changed
     close --> [*]
 ```
 
@@ -37,7 +39,9 @@ new class plus one registry entry; the orchestrator does not change.
 
 The only non-linear edge is `present → upsell`: when the customer raises no
 objection, the machine skips objection handling. That is the single permitted
-"jump", and it is enforced — see *Design notes* below.
+"jump", and it is enforced — see *Design notes* below. The way back to `present` is
+taken only when the customer changes the quantity or the service after hearing a
+price: the new order is priced again before the agent says anything about it.
 
 ## Architecture
 
@@ -187,6 +191,11 @@ up:
   an agent talks over its own offer.
 - **Money is `Decimal` end to end.** Prices arrive from `ops-core-api` as strings
   and stay exact; they are never floated.
+- **The model never does the arithmetic.** "Actually, make it eight" is priced by
+  `ops-core-api` in the same turn, before the reply is written, so the model is
+  handed the total instead of working it out. Every reply is then read back: an
+  amount that no quote in hand contains is replaced by a fixed sentence carrying the
+  real total.
 - **No database, but a bounded store.** Conversation state lives in-process behind a
   `ConversationRepository` port — the seam a Postgres/Redis store would slot into
   unchanged. It cannot leak: conversations expire after a TTL of inactivity and a
@@ -287,6 +296,11 @@ uv run mypy .
   один раз переспрашивает, а затем — ограниченно — эскалирует на человека
   (`handoff: true`), не зацикливаясь.
 - Деньги — `Decimal` от начала до конца, без float.
+- Модель не считает сама. «А давайте восемь» пересчитывается в `ops-core-api` в том
+  же ходе, до генерации ответа, и модель получает готовый итог. Каждый ответ затем
+  проверяется: сумму, которой нет ни в одной полученной котировке, заменяет
+  фиксированная фраза с настоящим итогом. Возврат в `present` из
+  `objection_handling` и `upsell` разрешён только для такого пересчёта.
 - БД нет, но стор **ограничен**: состояние диалога живёт в памяти за портом
   `ConversationRepository` (готовый шов для замены на Postgres/Redis). Утечки нет —
   диалоги истекают по TTL неактивности, а жёсткий лимит вытесняет наименее

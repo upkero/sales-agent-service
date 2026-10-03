@@ -30,9 +30,14 @@ from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.llm.prompt_builder import PromptBuilder
 from src.app.messages import get_message
 from src.app.prompts import Prompt, get_prompt
+from src.app.services.dialog.amounts import unquoted_amounts
 from src.app.services.dialog.decision import AgentDecision
+from src.app.services.dialog.extraction import canonical_service, coerce_quantity
 
 logger = getLogger(__name__)
+
+# The `data` fields of a stage that lets the prospect change their order.
+_ORDER_FIELDS = '"service": string|null, "quantity": integer|null'
 
 # The prompt files are English; this is what the {reply_language} placeholder in
 # persona.md is filled with. The instruction is never translated — only the
@@ -42,6 +47,7 @@ _LANGUAGE_NAMES = {"en": "English", "ru": "Russian"}
 _PERSONA = get_prompt("persona")
 _OUTPUT_CONTRACT = get_prompt("output_contract")
 _STRICT_REASK = get_prompt("strict_reask")
+_ORDER_CHANGE = get_prompt("order_change")
 
 
 class DialogueStage(ABC):
@@ -52,6 +58,11 @@ class DialogueStage(ABC):
     #: revision of which text produced a given turn — so an answer that reads
     #: wrong six weeks from now can be pinned to the wording that was live.
     prompts: ClassVar[tuple[Prompt, ...]] = ()
+
+    #: Whether the prospect can change their order (service, quantity) in this
+    #: stage. Set by the stages that talk money after a price was stated: the
+    #: prompt then asks for the change in `data`, and the base absorbs it.
+    takes_order_changes: ClassVar[bool] = False
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings) -> None:
         self._llm = llm
@@ -77,9 +88,13 @@ class DialogueStage(ABC):
             return self._on_parse_failure(conversation)
 
         conversation.consecutive_parse_failures = 0
+        # Checked against the quotes the model was given, before absorb() can change them.
+        reply = self._quoted_only(conversation, decision.reply)
+        if self.takes_order_changes:
+            self._absorb_order_change(conversation, decision)
         self.absorb(conversation, decision)
         next_stage = self.route(conversation, decision)
-        return StageResult(reply=decision.reply, current_stage=self.stage, next_stage=next_stage)
+        return StageResult(reply=reply, current_stage=self.stage, next_stage=next_stage)
 
     # ------------------------------------------------------------------ #
     # Overridable steps.
@@ -123,7 +138,8 @@ class DialogueStage(ABC):
         # the hard output rule bracket the free-form stage directive so a verbose
         # directive cannot bury either. Mirrors the ordering discipline in the
         # sibling voice-agent's dialog flow.
-        sections = (self._persona(), self.directive(conversation), self._output_contract())
+        order_change = _ORDER_CHANGE.text if self.takes_order_changes else ""
+        sections = (self._persona(), self.directive(conversation), order_change, self._output_contract())
         return "\n\n".join(section.strip() for section in sections if section.strip())
 
     def _persona(self) -> str:
@@ -136,11 +152,12 @@ class DialogueStage(ABC):
     def _output_contract(self) -> str:
         # Padded here rather than in the template so a stage that wants no data
         # gets `"data": {}` and not `"data": {  }`.
-        spec = self.data_spec()
+        spec = ", ".join(part for part in (self.data_spec(), _ORDER_FIELDS if self.takes_order_changes else "") if part)
         return _OUTPUT_CONTRACT.render(data_fields=f" {spec} " if spec else "")
 
     def _prompt_ids(self) -> list[str]:
-        return [prompt.id for prompt in (_PERSONA, _OUTPUT_CONTRACT, *self.prompts)]
+        order_change = (_ORDER_CHANGE,) if self.takes_order_changes else ()
+        return [prompt.id for prompt in (_PERSONA, _OUTPUT_CONTRACT, *order_change, *self.prompts)]
 
     async def _decide(self, messages: list[LLMMessage]) -> AgentDecision | None:
         response = await self._llm.complete(messages, json_mode=True)
@@ -177,6 +194,51 @@ class DialogueStage(ABC):
             },
         )
         return StageResult(reply=self._clarifier_message(), current_stage=self.stage, next_stage=self.stage)
+
+    def _quoted_only(self, conversation: Conversation, reply: str) -> str:
+        """The reply, unless it states an amount no quote in hand contains.
+
+        Then it is replaced by a fixed sentence carrying the real total (or, with
+        no quote yet, the promise to check), because a total the prospect hears
+        is a total they expect to pay.
+        """
+        unquoted = unquoted_amounts(reply, (conversation.quote, conversation.upsell_quote))
+        if not unquoted:
+            return reply
+        logger.warning(
+            "Reply stated an amount no quote contains; replaced",
+            extra={
+                "conversation_id": conversation.id,
+                "stage": self.stage.value,
+                "amounts": [str(amount) for amount in unquoted],
+            },
+        )
+        quote = conversation.quote
+        if quote is None:
+            return get_message(self._settings.language, "price_pending")
+        return get_message(self._settings.language, "quote_total").format(
+            quantity=quote.quantity, service=quote.service_name, total=quote.total
+        )
+
+    @staticmethod
+    def _absorb_order_change(conversation: Conversation, decision: AgentDecision) -> None:
+        """Take a service or quantity the prospect changed after hearing a price.
+
+        A changed slot no quote prices makes `conversation.quote_is_stale` true,
+        which sends the conversation back to PRESENT to be priced again.
+        """
+        service = decision.data.get("service")
+        if isinstance(service, str) and service.strip():
+            snapped = canonical_service(conversation.offered_services, service.strip())
+            # These prompts never list the catalogue, so a reply in another
+            # language echoes the service in translation ("глубокий массаж").
+            # Adopting that would re-quote it, 404, and retract a price we just
+            # gave. Once a quote exists, only a real catalogue name may replace it.
+            if conversation.quote is None or snapped in conversation.offered_services:
+                conversation.service = snapped
+        quantity = coerce_quantity(decision.data.get("quantity"))
+        if quantity is not None:
+            conversation.quantity = quantity
 
     @staticmethod
     def _describe_quote(quote: PriceQuote) -> str:

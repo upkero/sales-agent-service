@@ -35,13 +35,17 @@ class SalesService:
 
         current_stage = conversation.stage
         stage = self._stages[current_stage]
+        order_before = (conversation.service, conversation.quantity)
         result = await stage.handle(conversation)
 
-        if current_stage is SalesStage.QUALIFY and result.next_stage is SalesStage.PRESENT:
-            # Both slots were just filled. The reply QUALIFY wrote can only acknowledge them
-            # ("anything else I can help with?") and the guest would have to speak again to
-            # hear the price they asked for. So PRESENT takes this same turn and its reply,
-            # which states the price, replaces the acknowledgement.
+        order_changed = (conversation.service, conversation.quantity) != order_before
+        if result.next_stage is SalesStage.PRESENT and order_changed and conversation.quote_is_stale:
+            # The prospect just named an order no quote prices: both slots were filled
+            # in QUALIFY, or they changed the quantity or service after hearing a price.
+            # The reply just written was composed without a price for it, so it can
+            # only stall ("let me check") or, worse, work the total out itself. PRESENT
+            # takes this same turn instead: it asks ops-core-api first, and its reply,
+            # which states the real total, replaces the one without it.
             self._guard_transition(conversation, current_stage, result.next_stage)
             current_stage = SalesStage.PRESENT
             conversation.stage = current_stage

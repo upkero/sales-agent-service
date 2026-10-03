@@ -19,9 +19,11 @@ class SalesStage(StrEnum):
 
 
 # The legal moves. Every stage's route() must return a member of its own row;
-# SalesService rejects anything else as a bug (InvalidStageTransitionError). The
-# only non-linear edge is PRESENT -> UPSELL, the sanctioned single skip past
-# objection handling when the prospect raised no objection.
+# SalesService rejects anything else as a bug (InvalidStageTransitionError).
+# Two edges are not a step forward: PRESENT -> UPSELL, the sanctioned single skip
+# past objection handling when the prospect raised no objection, and the way back
+# to PRESENT from OBJECTION_HANDLING and UPSELL, taken only when the prospect
+# changed the quantity or the service and the new order has to be priced.
 ALLOWED_TRANSITIONS: dict[SalesStage, frozenset[SalesStage]] = {
     SalesStage.GREETING: frozenset({SalesStage.GREETING, SalesStage.QUALIFY}),
     SalesStage.QUALIFY: frozenset({SalesStage.QUALIFY, SalesStage.PRESENT}),
@@ -29,9 +31,9 @@ ALLOWED_TRANSITIONS: dict[SalesStage, frozenset[SalesStage]] = {
         {SalesStage.PRESENT, SalesStage.OBJECTION_HANDLING, SalesStage.UPSELL}
     ),
     SalesStage.OBJECTION_HANDLING: frozenset(
-        {SalesStage.OBJECTION_HANDLING, SalesStage.UPSELL}
+        {SalesStage.OBJECTION_HANDLING, SalesStage.UPSELL, SalesStage.PRESENT}
     ),
-    SalesStage.UPSELL: frozenset({SalesStage.UPSELL, SalesStage.CLOSE}),
+    SalesStage.UPSELL: frozenset({SalesStage.UPSELL, SalesStage.CLOSE, SalesStage.PRESENT}),
     SalesStage.CLOSE: frozenset({SalesStage.CLOSE}),
 }
 

@@ -25,6 +25,7 @@ class UpsellStage(DialogueStage):
 
     stage: ClassVar[SalesStage] = SalesStage.UPSELL
     prompts: ClassVar[tuple[Prompt, ...]] = (_UPSELL, _AFFIRM)
+    takes_order_changes: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -61,6 +62,10 @@ class UpsellStage(DialogueStage):
         return '"accept": boolean'
 
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
+        if conversation.quote_is_stale:
+            # A quantity or service that neither the plan nor the offer prices:
+            # back to PRESENT, which prices it before anything else is said.
+            return SalesStage.PRESENT
         if not conversation.upsell_offered:
             # Offer (or affirmation) made this turn; wait for the prospect's answer.
             conversation.upsell_offered = True

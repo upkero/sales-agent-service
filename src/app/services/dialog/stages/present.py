@@ -8,7 +8,6 @@ from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
-from src.app.services.dialog.extraction import canonical_service, coerce_quantity
 from src.app.services.dialog.stages.base import DialogueStage
 
 _PRESENT = get_prompt("stage_present")
@@ -30,6 +29,7 @@ class PresentStage(DialogueStage):
 
     stage: ClassVar[SalesStage] = SalesStage.PRESENT
     prompts: ClassVar[tuple[Prompt, ...]] = (_PRESENT, _UNKNOWN_SERVICE)
+    takes_order_changes: ClassVar[bool] = True
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings, pricing: PricingGateway) -> None:
         super().__init__(llm, settings)
@@ -43,6 +43,10 @@ class PresentStage(DialogueStage):
         try:
             conversation.quote = await self._pricing.quote(service, quantity)
             conversation.price_presented = False
+            # An upsell made from the previous order no longer fits this one;
+            # the funnel offers it again from the new quote.
+            conversation.upsell_quote = None
+            conversation.upsell_offered = False
         except ServiceNotFoundError:
             # Recoverable: the prospect named something not on the list. Drop the
             # stale quote and make sure we can show them what does exist.
@@ -61,27 +65,15 @@ class PresentStage(DialogueStage):
         return _PRESENT.render(quote_facts=self._describe_quote(conversation.quote))
 
     def data_spec(self) -> str:
-        return '"objection": boolean, "service": string|null, "quantity": integer|null'
-
-    def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
-        # Correction path: if the prospect renamed the service or changed the count,
-        # capture it so prepare() re-quotes next turn.
-        service = decision.data.get("service")
-        if isinstance(service, str) and service.strip():
-            snapped = canonical_service(conversation.offered_services, service.strip())
-            # PRESENT's prompt never lists the catalogue, so a reply in another
-            # language echoes the service in translation ("глубокий массаж").
-            # Adopting that would re-quote it, 404, and retract a price we just
-            # gave. Once a quote exists, only a real catalogue name may replace it.
-            if conversation.quote is None or snapped in conversation.offered_services:
-                conversation.service = snapped
-        quantity = coerce_quantity(decision.data.get("quantity"))
-        if quantity is not None:
-            conversation.quantity = quantity
+        return '"objection": boolean'
 
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
         if conversation.quote is None:
             # Nothing priced yet (unknown service). Stay until we can make an offer.
+            return SalesStage.PRESENT
+        if self._slots_to_quote(conversation) is not None:
+            # They changed the order. Stay, so it is priced before anything moves on;
+            # the orchestrator runs this stage again in the same turn to do it.
             return SalesStage.PRESENT
         if not conversation.price_presented:
             # We stated the price this turn; wait one turn for the prospect's reaction
