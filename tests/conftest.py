@@ -4,6 +4,7 @@ import os
 # then cached. These are throwaway values so importing the container never fails
 # on a required field; the tests inject fakes for the things that matter.
 os.environ.setdefault("OPS_CORE_API_KEY", "test-ops-core-key-1234567890")
+os.environ.setdefault("SECURITY_API_KEY", "test-inbound-key-1234567890")
 os.environ.setdefault("LLM_PROVIDER", "ollama")
 os.environ.setdefault("LLM_MODEL", "stub-model")
 os.environ.setdefault("LLM_BASE_URL", "http://localhost:11434/v1")
@@ -21,7 +22,7 @@ from src.app.api.v1.middleware.rate_limit import reset_rate_limit  # noqa: E402
 from src.app.core.settings.agent import SalesAgentSettings  # noqa: E402
 from tests.fakes import FakePricingGateway  # noqa: E402
 
-# A developer's .env must not leak into the tests: an INBOUND_API_KEY there turns
+# A developer's .env must not leak into the tests: a SECURITY_API_KEY there turns
 # every turn into a 401, an AGENT_LANGUAGE=ru changes the replies. Every settings
 # class is imported by now and none has been instantiated yet (the getters are
 # lazy), so dropping the file here leaves only the values set above.

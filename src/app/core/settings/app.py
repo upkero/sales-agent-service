@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Any
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -19,14 +19,6 @@ class AppSettings(BaseSettings):
     cors_allowed_origins: Annotated[list[str], NoDecode] = Field(
         default=[],
         description="Allowed CORS origins, comma-separated in the environment. Empty means no browser client.",
-    )
-    inbound_api_key: SecretStr | None = Field(
-        default=None,
-        description=(
-            "If set, the turn endpoint requires this key in the X-API-Key header. "
-            "Left unset the endpoint is open — convenient for a local demo, but set "
-            "it before exposing the service, since every turn costs an LLM call."
-        ),
     )
     turn_rate_limit_per_minute: int = Field(
         default=30,

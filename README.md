@@ -92,7 +92,8 @@ cp .env.example .env          # set OPS_CORE_API_KEY to your ops-core-api key
 docker compose up --build     # serves on http://localhost:8002
 ```
 
-`.env.example` ships with `OPS_CORE_API_KEY="change-me-min-16-chars"`. That exact
+`.env.example` ships with `OPS_CORE_API_KEY` and `SECURITY_API_KEY` both set to
+`"change-me-min-16-chars"`. That exact
 placeholder is shared by all five services in the portfolio, so `cp .env.example
 .env` gives a working local demo out of the box — and it is rotated in all five at
 once, never in one.
@@ -114,9 +115,11 @@ the first message is used, and `AGENT_LANGUAGE` only when that message has no
 letters at all.
 
 ```bash
+export SECURITY_API_KEY=change-me-min-16-chars   # or: set -a; . ./.env; set +a
+
 # First turn — the agent greets and the stage advances to "qualify"
 curl -s localhost:8002/api/v1/turn \
-  -H 'Content-Type: application/json' \
+  -H "X-API-Key: $SECURITY_API_KEY" -H 'Content-Type: application/json' \
   -d '{"message": "hi, I keep getting knots in my shoulders"}'
 ```
 
@@ -133,7 +136,7 @@ curl -s localhost:8002/api/v1/turn \
 ```bash
 # Continue — reuse the conversation_id you were given
 curl -s localhost:8002/api/v1/turn \
-  -H 'Content-Type: application/json' \
+  -H "X-API-Key: $SECURITY_API_KEY" -H 'Content-Type: application/json' \
   -d '{"message": "maybe three deep tissue massages", "conversation_id": "0b0f…"}'
 ```
 
@@ -169,10 +172,10 @@ up:
 
 - **The paid endpoint is protected.** Every turn drives an LLM call, so
   `POST /api/v1/turn` is **rate-limited per client IP** (429 + `Retry-After`
-  when exceeded) and can require an **inbound API key** (`X-API-Key`). The key is
-  optional — unset, the endpoint is open so the demo runs with no ceremony; set
-  `INBOUND_API_KEY` and it is enforced with a constant-time comparison. Health
-  probes are never rate-limited.
+  when exceeded) and requires an **inbound API key**: `SECURITY_API_KEY`, sent as
+  `X-API-Key` and checked in constant time. It is required, so a missing or
+  renamed variable stops the boot instead of leaving a paid endpoint open. Health
+  probes need no key and are never rate-limited.
 - **CORS is closed until you open it.** `CORS_ALLOWED_ORIGINS` defaults to *empty*,
   not `*`. The `curl` examples above work regardless, but **a browser frontend
   cannot call this service until its origin is listed** — set it in `.env` (CSV,
@@ -291,9 +294,9 @@ uv run mypy .
 
 ### Заметки по проду
 - Платный эндпоинт защищён: `POST /api/v1/turn` **ограничен по частоте на IP**
-  (429 + `Retry-After`) и может требовать **входной API-ключ** (`X-API-Key`). Ключ
-  опционален — без `INBOUND_API_KEY` эндпоинт открыт (чтобы демо запускалось без
-  церемоний), с ним — обязателен, сравнение константного времени. Health-пробы не
+  (429 + `Retry-After`) и требует **входной API-ключ** `SECURITY_API_KEY` в заголовке
+  `X-API-Key` (сравнение константного времени). Ключ обязателен: без него сервис не
+  стартует, а не открывает платный эндпоинт всем. Health-пробы ключа не требуют и не
   лимитируются.
 - CORS закрыт по умолчанию: `CORS_ALLOWED_ORIGINS` пуст, а не `*`. Примеры с `curl`
   работают в любом случае, но **браузерный фронтенд не сможет обратиться к сервису,

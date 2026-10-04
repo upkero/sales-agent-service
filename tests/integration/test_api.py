@@ -6,6 +6,7 @@ through the container, so these tests exercise the plumbing the service unit tes
 cannot see.
 """
 
+import os
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
@@ -26,11 +27,14 @@ from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, 
 TURN = "/api/v1/turn"
 
 
+# The key conftest configures; every turn must carry it.
+_AUTH = {"X-API-Key": os.environ["SECURITY_API_KEY"]}
+
 @asynccontextmanager
 async def _client(script: str | list[str], pricing: PricingGateway | None = None) -> AsyncIterator[AsyncClient]:
     app = create_app()
     app.state.container = build_container(StubLLM(script), pricing or FakePricingGateway())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver", headers=_AUTH) as client:
         yield client
 
 
@@ -116,7 +120,7 @@ async def test_a_blank_message_is_rejected_before_the_model_is_called() -> None:
     llm = StubLLM([])  # any call would exhaust the script and fail the request
     app = create_app()
     app.state.container = build_container(llm, FakePricingGateway())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver", headers=_AUTH) as client:
         response = await client.post(TURN, json={"message": " \n\t "})
 
     assert response.status_code == 422
@@ -143,7 +147,7 @@ class _DownLLM(StubLLM):
 async def test_an_llm_outage_is_a_502_not_our_500() -> None:
     app = create_app()
     app.state.container = build_container(_DownLLM([]), FakePricingGateway())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver", headers=_AUTH) as client:
         response = await client.post(TURN, json={"message": "hello"})
 
     assert response.status_code == 502
@@ -207,29 +211,16 @@ async def test_health_is_never_rate_limited() -> None:
     assert set(statuses) == {200}
 
 
-async def test_the_turn_endpoint_is_open_when_no_key_is_configured() -> None:
-    # The default in the test env: no INBOUND_API_KEY, so no header is needed.
+async def test_every_turn_needs_the_key() -> None:
     async with _client([control("hi")]) as client:
-        response = await client.post(TURN, json={"message": "hello"})
+        missing = await client.post(TURN, json={"message": "hi"}, headers={"X-API-Key": ""})
+        wrong = await client.post(TURN, json={"message": "hi"}, headers={"X-API-Key": "nope"})
+        right = await client.post(TURN, json={"message": "hi"})  # the client sends the configured key
 
-    assert response.status_code == 200
-
-
-async def test_inbound_auth_is_enforced_when_a_key_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("INBOUND_API_KEY", "s3cret-inbound-key-value")
-    get_app_settings.cache_clear()  # settings are cached; rebuild them with the key set
-    try:
-        async with _client(control("hi")) as client:
-            missing = await client.post(TURN, json={"message": "hi"})
-            wrong = await client.post(TURN, json={"message": "hi"}, headers={"X-API-Key": "nope"})
-            right = await client.post(TURN, json={"message": "hi"}, headers={"X-API-Key": "s3cret-inbound-key-value"})
-
-        assert missing.status_code == 401
-        assert missing.json()["error_code"] == "invalid_api_key"
-        assert wrong.status_code == 401
-        assert right.status_code == 200
-    finally:
-        get_app_settings.cache_clear()  # leave settings clean for other tests
+    assert missing.status_code == 401
+    assert missing.json()["error_code"] == "invalid_api_key"
+    assert wrong.status_code == 401
+    assert right.status_code == 200
 
 
 async def test_a_form_body_is_a_validation_error_not_a_crash() -> None:
