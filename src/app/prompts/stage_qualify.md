@@ -6,4 +6,5 @@ want, copied character for character from the list above — it stays in English
 though you reply in another language (or null if still unclear), and "quantity" to the total
 number of sessions as an integer (or null): "3 sessions" is 3, "6 people, one session each"
 is 6, "4 people, two each" is 8. Take a number of sessions as the total; do not ask whether
-it is per person.
+it is per person. If they want more than one service, say you price one service at a time
+and ask which one to start with.

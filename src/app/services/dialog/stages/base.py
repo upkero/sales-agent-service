@@ -76,6 +76,14 @@ class DialogueStage(ABC):
         self._llm = llm
         self._settings = settings
 
+    def hands_over(self, conversation: Conversation) -> bool:
+        """Whether the turn on which this stage just advanced goes on to the next stage.
+
+        `hands_over_on_advance` for most stages; a stage overrides this when it
+        depends on what the prospect said (see UpsellStage).
+        """
+        return self.hands_over_on_advance
+
     # ------------------------------------------------------------------ #
     # Template Method: the fixed skeleton. Do not override.
     # ------------------------------------------------------------------ #
@@ -266,8 +274,11 @@ class DialogueStage(ABC):
             if conversation.quote is None or snapped in conversation.offered_services:
                 conversation.service = snapped
         quantity = coerce_quantity(decision.data.get("quantity"))
-        last_said = next((m.content for m in reversed(conversation.messages) if m.role == "user"), "")
-        if quantity is not None and quantity != conversation.quantity and mentions_quantity(last_said, quantity):
+        if (
+            quantity is not None
+            and quantity != conversation.quantity
+            and mentions_quantity(conversation.last_said(), quantity)
+        ):
             conversation.quantity = quantity
 
     @staticmethod

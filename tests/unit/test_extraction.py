@@ -7,7 +7,7 @@ an unmapped 4xx, so it is worth catching at the boundary instead.
 
 import pytest
 
-from src.app.services.dialog.extraction import canonical_service, coerce_quantity, mentions_quantity
+from src.app.services.dialog.extraction import canonical_service, coerce_quantity, gives_contact, mentions_quantity
 
 
 @pytest.mark.parametrize("value", [1, 3, 1000, "7", " 12 "])
@@ -37,3 +37,10 @@ def test_a_quantity_counts_only_when_the_customer_named_it() -> None:
     # As seen live: "No thanks" reported as quantity 1, the order re-priced to one session.
     assert not mentions_quantity("No thanks.", 1)
     assert not mentions_quantity("make it 100", 10)
+
+
+def test_contact_details_are_recognised_and_prices_are_not() -> None:
+    assert gives_contact("Alex Audit, alex.audit@example.com")
+    assert gives_contact("Dana, +1 555 0100")
+    assert not gives_contact("Yes, the 2040.00 package")
+    assert not gives_contact("Neither, make it 10.")

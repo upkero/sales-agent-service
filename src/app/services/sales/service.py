@@ -92,7 +92,7 @@ class SalesService:
         # and the offer still belongs in this reply, not on the prospect's next message.
         # Bounded by the number of stages; the funnel only moves forward anyway.
         for _ in range(len(self._stages)):
-            if not self._stages[current_stage].hands_over_on_advance or result.next_stage is current_stage:
+            if result.next_stage is current_stage or not self._stages[current_stage].hands_over(conversation):
                 break
             self._guard_transition(conversation, current_stage, result.next_stage)
             current_stage = result.next_stage

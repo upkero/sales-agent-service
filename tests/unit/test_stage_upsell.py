@@ -182,3 +182,24 @@ async def test_a_quantity_the_customer_never_said_is_not_an_order_change(
 
     assert result.next_stage is SalesStage.CLOSE  # not back to PRESENT to price one session
     assert conversation.quantity == 3
+
+
+async def test_an_offer_already_named_gets_only_its_total(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    # The model named the package but not its price: one short sentence, not a second pitch.
+    stage = UpsellStage(
+        StubLLM(control("You could also take six sessions for a better rate. Interested?")),
+        agent_settings,
+        pricing,
+        VolumeDiscountTactic(),
+    )
+    conversation = _ready_conversation(quantity=3)
+
+    result = await stage.handle(conversation)
+
+    assert result.reply == (
+        "You could also take six sessions for a better rate. Interested? "
+        "That is 6 × Deep Tissue Massage for 648.00 in total."
+    )

@@ -65,6 +65,16 @@ def mentions_quantity(text: str, quantity: int) -> bool:
     return any(word in words for word in _NUMBER_WORDS.get(quantity, ()))
 
 
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+_PHONE = re.compile(r"\+?\d[\d\s().-]{5,}\d")
+
+
+def gives_contact(text: str) -> bool:
+    """Whether the message carries an email address or a phone number."""
+    # Seven digits at least, so a price ("2040.00") or a quantity is not a phone number.
+    return bool(_EMAIL.search(text)) or any(len(re.sub(r"\D", "", m)) >= 7 for m in _PHONE.findall(text))
+
+
 def canonical_service(catalogue: Sequence[str], extracted: str) -> str:
     """Snap a fuzzy match onto the exact catalogue name so the whole-string,
     case-insensitive price lookup is guaranteed to hit. Falls back to the raw

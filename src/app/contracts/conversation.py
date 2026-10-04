@@ -79,6 +79,10 @@ class Conversation:
     def add_agent(self, content: str) -> None:
         self.messages.append(ConversationMessage(role="assistant", content=content))
 
+    def last_said(self) -> str:
+        """The prospect's latest message, or "" before they have said anything."""
+        return next((m.content for m in reversed(self.messages) if m.role == "user"), "")
+
     def recent(self, limit: int) -> list[ConversationMessage]:
         """The last `limit` messages, oldest first — what gets replayed to the model.
 

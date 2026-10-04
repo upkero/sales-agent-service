@@ -11,6 +11,7 @@ from src.app.messages import get_message
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision, extract_json_object
+from src.app.services.dialog.extraction import gives_contact, mentions_quantity
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.sales.tactics import SalesTactic
 
@@ -82,6 +83,12 @@ class UpsellStage(DialogueStage):
             current_facts=self._describe_quote(conversation.quote) if conversation.quote else "",
         )
 
+    def hands_over(self, conversation: Conversation) -> bool:
+        # An answer that already carries a phone or an email goes straight to CLOSE,
+        # which confirms the order in this reply. Otherwise this reply would ask for
+        # the details just given, and CLOSE would repeat it on the next message.
+        return gives_contact(conversation.last_said())
+
     def ensure_stated(self, conversation: Conversation, reply: str) -> str:
         # The offer turn must make the offer: route() marks it offered, and the next
         # turn reads the answer to it. Seen live after "no thanks" or a settled
@@ -89,7 +96,10 @@ class UpsellStage(DialogueStage):
         offer = conversation.upsell_quote
         if conversation.upsell_offered or offer is None or states_amount(reply, offer.total):
             return reply
-        sentence = get_message(conversation.language, "upsell_offer").format(
+        # A reply that already names the package ("like 20 sessions") only lacks its
+        # total; a second full offer after it would read as the same pitch twice.
+        key = "upsell_total" if mentions_quantity(reply, offer.quantity) else "upsell_offer"
+        sentence = get_message(conversation.language, key).format(
             quantity=offer.quantity, service=offer.service_name, total=offer.total
         )
         return f"{reply} {sentence}"

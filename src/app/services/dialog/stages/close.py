@@ -4,6 +4,7 @@ from typing import ClassVar
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
 from src.app.prompts import Prompt, get_prompt
+from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
 
@@ -39,6 +40,14 @@ class CloseStage(DialogueStage):
         # package and its real total instead of reconstructing them from the chat.
         order_facts = self._describe_quote(conversation.quote) if conversation.quote else ""
         return _CLOSE.render(order_facts=order_facts)
+
+    def ensure_stated(self, conversation: Conversation, reply: str) -> str:
+        # The confirmation names the order's total. Seen live: the model repeated its
+        # previous "the front desk will confirm shortly" and confirmed nothing.
+        quote = conversation.quote
+        if conversation.closed or quote is None or states_amount(reply, quote.total):
+            return reply
+        return f"{reply} {self._total_sentence(conversation, quote)}"
 
     def data_spec(self) -> str:
         # Asked for after the close too, and ignored there (see absorb): data_spec

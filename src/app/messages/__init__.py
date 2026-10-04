@@ -20,6 +20,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "quote_total": "For {quantity} × {service} the total is {total}.",
         "upsell_offer": "There is also a better-value option: {quantity} × {service} for {total} in total. "
         "Would you like that instead?",
+        "upsell_total": "That is {quantity} × {service} for {total} in total.",
     },
     "ru": {
         "clarifier": "Извините, я не расслышал. Не могли бы вы повторить?",
@@ -28,6 +29,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "quote_total": "{quantity} × {service}: итого {total}.",
         "upsell_offer": "Есть и более выгодный вариант: {quantity} × {service}, итого {total}. "
         "Хотите его вместо текущего?",
+        "upsell_total": "Это {quantity} × {service}, итого {total}.",
     },
 }
 

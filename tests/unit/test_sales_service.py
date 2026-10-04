@@ -303,3 +303,29 @@ async def test_an_illegal_transition_is_a_typed_error_not_a_crash(agent_settings
     # Rendered as the uniform 500 envelope by the handler, never a raw stacktrace.
     assert caught.value.status_code == 500
     assert caught.value.error_code == "invalid_stage_transition"
+
+
+async def test_an_answer_with_contact_details_is_confirmed_in_the_same_reply() -> None:
+    # As seen live: the answer turn asked for details just given, and CLOSE then
+    # repeated that line on the next message without confirming anything.
+    llm = StubLLM(
+        [
+            control("Hello!"),
+            control("Six, got it.", service="Deep Tissue Massage", quantity=6),
+            control("That's 648.00 in total.", objection=False),
+            control("(reaction read)", objection=False),  # PRESENT
+            control("Twenty would be 2040.00."),  # UPSELL offers
+            verdict(False),  # the answer does not take it...
+            control("(would ask for details)"),  # ...UPSELL's reply, replaced
+            control("Thanks, Dana! The front desk will be in touch.", name="Dana", contact="dana@example.com"),
+        ]
+    )
+    service = build_container(llm, FakePricingGateway()).sales_service
+
+    outcomes = await _drive(service, ["hi", "six deep tissue massages", "ok", "Dana, dana@example.com"])
+
+    assert outcomes[-1].stage is SalesStage.CLOSE
+    assert outcomes[-1].done is True
+    assert outcomes[-1].reply == (
+        "Thanks, Dana! The front desk will be in touch. For 6 × Deep Tissue Massage the total is 648.00."
+    )
