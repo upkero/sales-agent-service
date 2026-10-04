@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from src.app.contracts.sales import SalesStage, TurnOutcome
 from src.app.services.sales.service import SalesService
-from tests.fakes import FakePricingGateway, StubLLM, build_container, control
+from tests.fakes import FakePricingGateway, StubLLM, build_container, control, verdict
 
 # Turns 1-3 of every scenario: greet, qualify three deep tissue massages (PRESENT
 # answers in the same turn with 3 x 120 = 360.00).
@@ -95,8 +95,9 @@ async def test_a_change_in_answer_to_the_upsell_is_priced_again() -> None:
         [
             *_PRICED_AT_THREE,
             control("Great.", objection=False),
-            control("Six would be 648.00 instead of 720.00.", accept=False),
-            control("Sure.", accept=False, quantity=8),
+            control("Six would be 648.00 instead of 720.00."),
+            verdict(False),
+            control("Sure.", quantity=8),
             control("Eight sessions come to 864.00 in total.", objection=False),
         ]
     )
@@ -104,14 +105,11 @@ async def test_a_change_in_answer_to_the_upsell_is_priced_again() -> None:
 
     outcomes = await _drive(
         service,
-        ["hi", "three deep tissue massages", "sounds good", "go on", "neither, make it 8"],
+        ["hi", "three deep tissue massages", "sounds good", "neither, make it 8"],
     )
 
-    assert [outcome.stage for outcome in outcomes[-3:]] == [
-        SalesStage.UPSELL,
-        SalesStage.UPSELL,
-        SalesStage.PRESENT,
-    ]
+    assert [outcome.stage for outcome in outcomes[-2:]] == [SalesStage.UPSELL, SalesStage.PRESENT]
+    assert outcomes[-2].reply == "Six would be 648.00 instead of 720.00."  # offered on "sounds good"
     assert outcomes[-1].reply == "Eight sessions come to 864.00 in total."
     conversation = await service._conversations.get(outcomes[-1].conversation_id)
     assert conversation is not None and conversation.quote is not None
@@ -149,13 +147,14 @@ async def test_the_offered_upsell_quantity_is_not_priced_again() -> None:
         [
             *_PRICED_AT_THREE,
             control("Great.", objection=False),
-            control("Six would be 648.00.", accept=False),
-            control("Wonderful.", accept=True, quantity=6),
+            control("Six would be 648.00."),
+            verdict(True),
+            control("Wonderful.", quantity=6),
         ]
     )
     service = build_container(llm, pricing).sales_service
 
-    outcomes = await _drive(service, ["hi", "three deep tissue massages", "sounds good", "go on", "yes, six"])
+    outcomes = await _drive(service, ["hi", "three deep tissue massages", "sounds good", "yes, six"])
 
     assert outcomes[-1].stage is not SalesStage.PRESENT
     assert pricing.calls.count(("quote", "Deep Tissue Massage", "6")) == 1

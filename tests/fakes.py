@@ -148,6 +148,11 @@ def control(reply: str, **data: object) -> str:
     return json.dumps({"reply": reply, "data": data})
 
 
+def verdict(take: bool) -> str:
+    """What the upsell-answer reading call returns: did the reply take the offer."""
+    return json.dumps({"take": take})
+
+
 def build_container(llm: LLMClient, pricing: PricingGateway) -> ApplicationContainer:
     """A real container with the two external dependencies pre-injected.
 

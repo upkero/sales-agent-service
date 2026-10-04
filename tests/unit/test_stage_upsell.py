@@ -5,7 +5,7 @@ from src.app.contracts.sales import SalesStage
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.services.dialog.stages.upsell import UpsellStage
 from src.app.services.sales.tactics import VolumeDiscountTactic
-from tests.fakes import FakePricingGateway, StubLLM, compute_quote, control
+from tests.fakes import FakePricingGateway, StubLLM, compute_quote, control, verdict
 
 
 def _ready_conversation(quantity: int = 3) -> Conversation:
@@ -66,7 +66,8 @@ async def test_an_accepted_upsell_becomes_the_order(
     pricing: FakePricingGateway,
 ) -> None:
     conversation = _answering_conversation()
-    stage = UpsellStage(StubLLM(control("Six it is.", accept=True)), agent_settings, pricing, VolumeDiscountTactic())
+    llm = StubLLM([verdict(True), control("Six it is.")])
+    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
 
     await stage.handle(conversation)
 
@@ -74,19 +75,30 @@ async def test_an_accepted_upsell_becomes_the_order(
     assert conversation.quantity == 6
     assert conversation.quote is not None
     assert conversation.quote.total == Decimal("648.00")
+    # The reply is told what was taken instead of guessing it again.
+    assert "They took the larger package" in llm.calls[1][0].content
 
 
-async def test_naming_the_offered_quantity_accepts_it_even_without_the_flag(
+async def test_contact_details_alone_keep_the_base_order(
     agent_settings: SalesAgentSettings,
     pricing: FakePricingGateway,
 ) -> None:
+    # As seen live: the reply call marks bare contact details as a yes and echoes
+    # the offered quantity. Only the reading call decides.
     conversation = _answering_conversation()
-    stage = UpsellStage(StubLLM(control("Six it is.", quantity=6)), agent_settings, pricing, VolumeDiscountTactic())
+    conversation.add_user("Dana, dana@example.com")
+    llm = StubLLM([verdict(False), control("Thanks, Dana!", accept=True, quantity=6)])
+    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
 
     await stage.handle(conversation)
 
-    assert conversation.accepted_offer == "upsell"
-    assert conversation.quote is not None and conversation.quote.quantity == 6
+    assert conversation.accepted_offer == "base"
+    assert conversation.quantity == 3
+    assert conversation.quote is not None and conversation.quote.total == Decimal("360.00")
+    # The reading call gets the customer's words as a user message, never in the system role.
+    reading = llm.calls[0]
+    assert reading[-1].role == "user" and reading[-1].content == "Dana, dana@example.com"
+    assert "dana@example.com" not in reading[0].content
 
 
 async def test_a_declined_upsell_keeps_the_base_offer(
@@ -107,8 +119,9 @@ async def test_the_offer_turn_records_no_answer(
     agent_settings: SalesAgentSettings,
     pricing: FakePricingGateway,
 ) -> None:
-    # accept=True on the turn the offer is made is the model jumping ahead.
-    llm = StubLLM(control("Six for 648.00?", accept=True))
+    # The model echoing its own offer into "data" on the offer turn is not the
+    # prospect's order; taken as one, their next message would accept it.
+    llm = StubLLM(control("Six for 648.00?", accept=True, quantity=6))
     stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
     conversation = _ready_conversation(quantity=3)
 

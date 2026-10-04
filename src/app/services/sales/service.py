@@ -85,6 +85,14 @@ class SalesService:
             current_stage = SalesStage.PRESENT
             conversation.stage = current_stage
             result = await self._stages[current_stage].handle(conversation)
+        elif stage.hands_over_on_advance and result.next_stage is not current_stage:
+            # The stage only read the prospect's reaction; the stage it moved to
+            # answers this turn (the upsell offer right after "sounds good"), and
+            # its reply replaces the one that had nothing to say. One hop at most.
+            self._guard_transition(conversation, current_stage, result.next_stage)
+            current_stage = result.next_stage
+            conversation.stage = current_stage
+            result = await self._stages[current_stage].handle(conversation)
 
         self._guard_transition(conversation, current_stage, result.next_stage)
 

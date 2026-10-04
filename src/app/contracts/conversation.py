@@ -54,6 +54,9 @@ class Conversation:
     # and whether it has been put to the prospect yet. Same two-turn shape as PRESENT.
     upsell_quote: PriceQuote | None = None
     upsell_offered: bool = False
+    # Whether their answer takes the offer: read by a call of its own before the
+    # reply is written, so the reply and the recorded order cannot disagree.
+    upsell_taken: bool = False
 
     # What the prospect took when they answered the upsell: the larger package, or
     # the plan they had. `quote` is then the accepted order, which is what CLOSE

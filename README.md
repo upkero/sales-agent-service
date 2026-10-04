@@ -194,7 +194,11 @@ up:
   generic apology.
 - **`present` and `upsell` each span two turns** — state the price, *then* read the
   reaction — because branching on a reaction the customer has not given yet is how
-  an agent talks over its own offer.
+  an agent talks over its own offer. The turn that reads the reaction is answered by
+  the stage it leads to: "sounds good" gets the upsell offer, not a dead-end "glad to
+  hear it" that would push the offer onto the customer's contact details. Whether
+  the answer takes the offer is read by a separate, narrow call that sees only the
+  offer and the reply — bare contact details are not a yes.
 - **Money is `Decimal` end to end.** Prices arrive from `ops-core-api` as strings
   and stay exact; they are never floated.
 - **The model never does the arithmetic.** "Actually, make it eight" is priced by
@@ -303,6 +307,8 @@ uv run mypy .
 - Сломанная модель не может «заклинить» диалог: при повторно невалидном JSON агент
   один раз переспрашивает, а затем — ограниченно — эскалирует на человека
   (`handoff: true`), не зацикливаясь.
+- На «звучит хорошо» сразу отвечает следующий этап: предложение апселла приходит в
+  том же ходе, а не в ответ на следующее сообщение клиента (обычно это его контакты).
 - После ответа на апселл агент один раз просит имя и телефон или email и переходит в
   `close`; следующее сообщение клиента получает одно итоговое подтверждение заказа с
   суммой, и `done` становится `true`.

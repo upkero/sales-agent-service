@@ -21,6 +21,7 @@ class ObjectionHandlingStage(DialogueStage):
     stage: ClassVar[SalesStage] = SalesStage.OBJECTION_HANDLING
     prompts: ClassVar[tuple[Prompt, ...]] = (_OBJECTION,)
     takes_order_changes: ClassVar[bool] = True
+    hands_over_on_advance: ClassVar[bool] = True
 
     def directive(self, conversation: Conversation) -> str:
         quote_facts = self._describe_quote(conversation.quote) if conversation.quote else ""

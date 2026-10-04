@@ -23,7 +23,7 @@ from src.app.repositories.memory_conversation import InMemoryConversationReposit
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.sales.service import SalesService
-from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, build_container, control
+from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, build_container, control, verdict
 
 
 async def _drive(
@@ -62,9 +62,12 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
             # answers in the same turn, so the price is in the reply the guest hears.
             control("Great — three deep tissue massages.", service="Deep Tissue Massage", quantity=3),
             control("That comes to 360 in total.", objection=False),
+            # One guest message, two model calls again: PRESENT reads "sounds good",
+            # then UPSELL makes its offer in the same turn.
             control("Wonderful, glad it works.", objection=False),
-            control("Book six for 648 and save 10% versus 720.", accept=True),
-            control("Perfect, six it is. May I have your name and a phone or email?", accept=True),
+            control("Book six for 648 and save 10% versus 720."),
+            verdict(True),  # "yes, let's do six" is read on its own first...
+            control("Perfect, six it is. May I have your name and a phone or email?"),
             control("Thank you, Dana! The front desk will email you.", name="Dana", contact="dana@example.com"),
         ]
     )
@@ -76,7 +79,6 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
             "hi there",
             "I'd like three deep tissue massages",
             "sounds good",
-            "sure, tell me more",
             "yes, let's do six",
             "Dana, dana@example.com",
         ],
@@ -88,11 +90,13 @@ async def test_full_funnel_reaches_a_correctly_priced_upsell() -> None:
         SalesStage.QUALIFY,
         SalesStage.PRESENT,
         SalesStage.UPSELL,
-        SalesStage.UPSELL,
         SalesStage.CLOSE,
         SalesStage.CLOSE,
     ]
     assert outcomes[1].reply == "That comes to 360 in total."
+    # The offer answers "sounds good"; a dead-end "glad it works" would push it
+    # onto the guest's next message, usually their contact details.
+    assert outcomes[2].reply == "Book six for 648 and save 10% versus 720."
     _assert_no_illegal_jump(stages)
     assert outcomes[-2].done is False  # asked for the contact
     assert outcomes[-1].done is True  # confirmed the order once and closed
@@ -117,9 +121,10 @@ async def test_after_agreeing_the_agent_asks_for_a_contact_once_then_closes() ->
             control("Hi!"),
             control("Three, got it.", service="Deep Tissue Massage", quantity=3),
             control("That comes to 360.00.", objection=False),
-            same_line,  # PRESENT reads the agreement
-            same_line,  # UPSELL makes its offer
-            same_line,  # UPSELL reads the answer
+            same_line,  # PRESENT reads the agreement...
+            same_line,  # ...and UPSELL makes its offer in the same turn
+            verdict(False),  # UPSELL reads the answer...
+            same_line,  # ...and acknowledges it
             same_line,  # CLOSE confirms
             same_line,  # CLOSE, after the conversation is over
         ]
@@ -128,11 +133,11 @@ async def test_after_agreeing_the_agent_asks_for_a_contact_once_then_closes() ->
 
     outcomes = await _drive(
         service,
-        ["hi", "three massages", "OK, sounds good", "go on", "no, three is fine", "Dana, 555-0100", "thanks"],
+        ["hi", "three massages", "OK, sounds good", "no, three is fine", "Dana, 555-0100", "thanks"],
     )
 
     # Agreement -> one ask for the contact -> one closing message -> done.
-    assert [(outcome.stage, outcome.done) for outcome in outcomes[3:]] == [
+    assert [(outcome.stage, outcome.done) for outcome in outcomes[2:]] == [
         (SalesStage.UPSELL, False),  # the offer
         (SalesStage.CLOSE, False),  # the answer: asks for a name and a contact
         (SalesStage.CLOSE, True),  # the confirmation: closed
@@ -156,17 +161,19 @@ async def test_an_objection_is_handled_before_the_upsell() -> None:
             control("Hello! What can I help you with?"),
             control("Two physiotherapy assessments, got it.", service="Physiotherapy Assessment", quantity=2),
             control("That's 280 in total.", objection=False),
-            control("I understand, it's an investment.", objection=True),
-            control("Buying a block brings the per-session price down.", resolved=True),
-            control("For six you'd unlock a discount.", accept=False),
-            control("No problem — two it is.", accept=False),
+            control("I understand, it's an investment.", objection=True),  # PRESENT reads the concern...
+            control("Buying a block brings the per-session price down.", resolved=False),  # ...OBJECTION answers it
+            control("Glad that helps.", resolved=True),  # OBJECTION reads that it is settled...
+            control("For six you'd unlock a discount."),  # ...UPSELL offers
+            verdict(False),
+            control("No problem — two it is."),
         ]
     )
     service = build_container(llm, pricing).sales_service
 
     outcomes = await _drive(
         service,
-        ["hi", "two physio assessments", "hmm, pricey", "okay that helps", "go on", "let's keep it at two"],
+        ["hi", "two physio assessments", "hmm, pricey", "okay that helps", "let's keep it at two"],
     )
 
     stages = [SalesStage.GREETING, *[outcome.stage for outcome in outcomes]]
@@ -174,6 +181,9 @@ async def test_an_objection_is_handled_before_the_upsell() -> None:
     _assert_no_illegal_jump(stages)
     # The objection path is the linear route, never a skip.
     assert stages.index(SalesStage.OBJECTION_HANDLING) < stages.index(SalesStage.UPSELL)
+    # Each reaction is answered by the stage it leads to, not by a dead end.
+    assert outcomes[2].reply == "Buying a block brings the per-session price down."
+    assert outcomes[3].reply == "For six you'd unlock a discount."
 
 
 async def test_repeated_unparseable_output_escalates_to_a_bounded_handoff() -> None:

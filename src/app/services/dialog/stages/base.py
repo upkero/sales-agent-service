@@ -64,6 +64,14 @@ class DialogueStage(ABC):
     #: prompt then asks for the change in `data`, and the base absorbs it.
     takes_order_changes: ClassVar[bool] = False
 
+    #: Whether the turn on which this stage advances is handed, in full, to the
+    #: stage it advanced to. Set by the stages whose advancing turn is spent
+    #: reading the prospect's reaction ("sounds good", "okay, that helps"): they
+    #: have nothing left to say, and a reply from them would be a dead end that
+    #: pushes the next stage's opening line onto the prospect's following
+    #: message — typically their contact details, then misread as an answer.
+    hands_over_on_advance: ClassVar[bool] = False
+
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings) -> None:
         self._llm = llm
         self._settings = settings
@@ -224,8 +232,7 @@ class DialogueStage(ABC):
             quantity=quote.quantity, service=quote.service_name, total=quote.total
         )
 
-    @staticmethod
-    def _absorb_order_change(conversation: Conversation, decision: AgentDecision) -> None:
+    def _absorb_order_change(self, conversation: Conversation, decision: AgentDecision) -> None:
         """Take a service or quantity the prospect changed after hearing a price.
 
         A changed slot no quote prices makes `conversation.quote_is_stale` true,

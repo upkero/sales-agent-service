@@ -23,7 +23,7 @@ class AgentDecision:
 
     @classmethod
     def parse(cls, raw: str) -> "AgentDecision | None":
-        obj = _extract_json_object(raw)
+        obj = extract_json_object(raw)
         if obj is None:
             return None
 
@@ -46,7 +46,7 @@ class AgentDecision:
         return False
 
 
-def _extract_json_object(raw: str) -> dict[str, Any] | None:
+def extract_json_object(raw: str) -> dict[str, Any] | None:
     """Best-effort recovery of the JSON object from a model reply.
 
     Tries three things in order of cleanliness: the whole string, the string with

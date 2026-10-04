@@ -30,6 +30,7 @@ class PresentStage(DialogueStage):
     stage: ClassVar[SalesStage] = SalesStage.PRESENT
     prompts: ClassVar[tuple[Prompt, ...]] = (_PRESENT, _UNKNOWN_SERVICE)
     takes_order_changes: ClassVar[bool] = True
+    hands_over_on_advance: ClassVar[bool] = True
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings, pricing: PricingGateway) -> None:
         super().__init__(llm, settings)
