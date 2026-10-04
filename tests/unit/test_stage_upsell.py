@@ -148,3 +148,37 @@ async def test_at_the_top_tier_there_is_nothing_to_upsell(
     assert conversation.upsell_quote is None  # no bigger tier to pitch
     assert ("quote", "Deep Tissue Massage", "6") not in pricing.calls
     assert result.next_stage is SalesStage.UPSELL
+
+
+async def test_the_offer_turn_always_makes_the_offer(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    # As seen live after "no thanks": a polite "anything else?" with no offer in it,
+    # and the next message read as the answer to an offer nobody had heard.
+    stage = UpsellStage(
+        StubLLM(control("Glad to help! Anything else?")), agent_settings, pricing, VolumeDiscountTactic()
+    )
+    conversation = _ready_conversation(quantity=3)
+
+    result = await stage.handle(conversation)
+
+    assert result.reply == (
+        "Glad to help! Anything else? There is also a better-value option: "
+        "6 × Deep Tissue Massage for 648.00 in total. Would you like that instead?"
+    )
+
+
+async def test_a_quantity_the_customer_never_said_is_not_an_order_change(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    conversation = _answering_conversation()
+    conversation.add_user("No thanks.")
+    llm = StubLLM([verdict(False), control("No problem!", quantity=1)])
+    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
+
+    result = await stage.handle(conversation)
+
+    assert result.next_stage is SalesStage.CLOSE  # not back to PRESENT to price one session
+    assert conversation.quantity == 3

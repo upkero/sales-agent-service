@@ -7,7 +7,7 @@ an unmapped 4xx, so it is worth catching at the boundary instead.
 
 import pytest
 
-from src.app.services.dialog.extraction import canonical_service, coerce_quantity
+from src.app.services.dialog.extraction import canonical_service, coerce_quantity, mentions_quantity
 
 
 @pytest.mark.parametrize("value", [1, 3, 1000, "7", " 12 "])
@@ -28,3 +28,12 @@ def test_a_loose_name_snaps_onto_the_catalogue() -> None:
 
 def test_an_unknown_name_is_left_alone_for_present_to_recover() -> None:
     assert canonical_service(("Deep Tissue Massage",), "hot stone") == "hot stone"
+
+
+def test_a_quantity_counts_only_when_the_customer_named_it() -> None:
+    assert mentions_quantity("Neither, make it 10.", 10)
+    assert mentions_quantity("actually make it eight", 8)
+    assert mentions_quantity("Давайте восемь", 8)
+    # As seen live: "No thanks" reported as quantity 1, the order re-priced to one session.
+    assert not mentions_quantity("No thanks.", 1)
+    assert not mentions_quantity("make it 100", 10)

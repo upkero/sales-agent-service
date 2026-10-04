@@ -32,7 +32,7 @@ from src.app.messages import get_message
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.amounts import unquoted_amounts
 from src.app.services.dialog.decision import AgentDecision
-from src.app.services.dialog.extraction import canonical_service, coerce_quantity
+from src.app.services.dialog.extraction import canonical_service, coerce_quantity, mentions_quantity
 
 logger = getLogger(__name__)
 
@@ -97,7 +97,7 @@ class DialogueStage(ABC):
 
         conversation.consecutive_parse_failures = 0
         # Checked against the quotes the model was given, before absorb() can change them.
-        reply = self._quoted_only(conversation, decision.reply)
+        reply = self.ensure_stated(conversation, self._quoted_only(conversation, decision))
         if self.takes_order_changes:
             self._absorb_order_change(conversation, decision)
         self.absorb(conversation, decision)
@@ -122,6 +122,15 @@ class DialogueStage(ABC):
     def data_spec(self) -> str:
         """Description of the `data` fields this stage wants back. Empty = none."""
         return ""
+
+    def ensure_stated(self, conversation: Conversation, reply: str) -> str:
+        """Hook: the reply, with any number this turn must say added if the model left it out.
+
+        The model sometimes talks around the figure it was handed (a customer asks for
+        a discount instead of a price, or has already said "no thanks"), while route()
+        moves the funnel on as if it had been said. Identity by default.
+        """
+        return reply
 
     def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:  # noqa: B027 (deliberate optional hook)
         """Hook: persist slots the model extracted. No-op by default (see prepare)."""
@@ -207,14 +216,18 @@ class DialogueStage(ABC):
             next_stage=self.stage,
         )
 
-    def _quoted_only(self, conversation: Conversation, reply: str) -> str:
+    def _quoted_only(self, conversation: Conversation, decision: AgentDecision) -> str:
         """The reply, unless it states an amount no quote in hand contains.
 
         Then it is replaced by a fixed sentence carrying the real total (or, with
         no quote yet, the promise to check), because a total the prospect hears
         is a total they expect to pay.
         """
-        unquoted = unquoted_amounts(reply, (conversation.quote, conversation.upsell_quote))
+        reply = decision.reply
+        # The quantity this very reply extracted counts too: it is absorbed only after
+        # this check, and "500 sessions" before any quote is a count, not a price.
+        quantity = coerce_quantity(decision.data.get("quantity")) or conversation.quantity
+        unquoted = unquoted_amounts(reply, (conversation.quote, conversation.upsell_quote), quantity=quantity)
         if not unquoted:
             return reply
         logger.warning(
@@ -228,6 +241,11 @@ class DialogueStage(ABC):
         quote = conversation.quote
         if quote is None:
             return get_message(conversation.language, "price_pending")
+        return self._total_sentence(conversation, quote)
+
+    @staticmethod
+    def _total_sentence(conversation: Conversation, quote: PriceQuote) -> str:
+        """The fixed sentence that states a quote's total, in the conversation's language."""
         return get_message(conversation.language, "quote_total").format(
             quantity=quote.quantity, service=quote.service_name, total=quote.total
         )
@@ -248,7 +266,8 @@ class DialogueStage(ABC):
             if conversation.quote is None or snapped in conversation.offered_services:
                 conversation.service = snapped
         quantity = coerce_quantity(decision.data.get("quantity"))
-        if quantity is not None:
+        last_said = next((m.content for m in reversed(conversation.messages) if m.role == "user"), "")
+        if quantity is not None and quantity != conversation.quantity and mentions_quantity(last_said, quantity):
             conversation.quantity = quantity
 
     @staticmethod

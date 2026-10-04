@@ -124,7 +124,8 @@ async def test_a_change_during_an_objection_is_priced_again() -> None:
     llm = StubLLM(
         [
             *_PRICED_AT_THREE,
-            control("I hear you.", objection=True),
+            control("Fair.", objection=True),  # PRESENT reads the concern...
+            control("I hear you.", resolved=False),  # ...and OBJECTION answers it
             control("Good thinking.", resolved=False, quantity=8),
             control("Eight sessions come to 864.00 in total.", objection=False),
         ]
@@ -158,6 +159,24 @@ async def test_the_offered_upsell_quantity_is_not_priced_again() -> None:
 
     assert outcomes[-1].stage is not SalesStage.PRESENT
     assert pricing.calls.count(("quote", "Deep Tissue Massage", "6")) == 1
+
+
+async def test_the_turn_that_presents_the_price_always_states_it() -> None:
+    # As seen live: asked for a 90% discount, the model refused and never said the
+    # price, and the next turn read a "reaction" to a number nobody had heard.
+    llm = StubLLM(
+        [
+            control("Hi, I'm Alex. What brings you in?"),
+            control("Noted.", service="Deep Tissue Massage", quantity=3),
+            control("I can't offer a discount like that.", objection=False),
+        ]
+    )
+    service = build_container(llm, FakePricingGateway()).sales_service
+
+    outcomes = await _drive(service, ["hi", "3 deep tissue massages at 90% off"])
+
+    assert outcomes[-1].stage is SalesStage.PRESENT
+    assert outcomes[-1].reply == "For 3 × Deep Tissue Massage the total is 360.00. I can't offer a discount like that."
 
 
 async def test_a_total_the_quote_does_not_contain_never_reaches_the_prospect() -> None:

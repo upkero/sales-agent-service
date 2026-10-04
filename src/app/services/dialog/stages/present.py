@@ -7,6 +7,7 @@ from src.app.exceptions.pricing import ServiceNotFoundError
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
 from src.app.prompts import Prompt, get_prompt
+from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
 
@@ -66,6 +67,14 @@ class PresentStage(DialogueStage):
                 catalogue=", ".join(conversation.offered_services) or "our listed services",
             )
         return _PRESENT.render(quote_facts=self._describe_quote(conversation.quote))
+
+    def ensure_stated(self, conversation: Conversation, reply: str) -> str:
+        # The turn that presents the price must state it: route() marks it presented,
+        # and the next turn reads the reaction to a number the prospect has heard.
+        quote = conversation.quote
+        if quote is None or conversation.price_presented or states_amount(reply, quote.total):
+            return reply
+        return f"{self._total_sentence(conversation, quote)} {reply}"
 
     def data_spec(self) -> str:
         return '"objection": boolean'

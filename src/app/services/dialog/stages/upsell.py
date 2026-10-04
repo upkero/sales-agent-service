@@ -7,7 +7,9 @@ from src.app.contracts.sales import SalesStage
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
+from src.app.messages import get_message
 from src.app.prompts import Prompt, get_prompt
+from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision, extract_json_object
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.sales.tactics import SalesTactic
@@ -69,8 +71,9 @@ class UpsellStage(DialogueStage):
             if conversation.upsell_taken and conversation.upsell_quote is not None:
                 choice = f"They took the larger package: {self._describe_quote(conversation.upsell_quote)}"
             else:
-                current = self._describe_quote(conversation.quote) if conversation.quote else ""
-                choice = f"They keep their current order. {current}".strip()
+                # Neutral on purpose: "they keep their order" talked the model out of
+                # reporting "neither, make it 10" as the change it is.
+                choice = "They did not take the larger package."
             return _ANSWER.render(choice=choice)
         if conversation.upsell_quote is None:
             return _AFFIRM.text
@@ -78,6 +81,18 @@ class UpsellStage(DialogueStage):
             upsell_facts=self._describe_quote(conversation.upsell_quote),
             current_facts=self._describe_quote(conversation.quote) if conversation.quote else "",
         )
+
+    def ensure_stated(self, conversation: Conversation, reply: str) -> str:
+        # The offer turn must make the offer: route() marks it offered, and the next
+        # turn reads the answer to it. Seen live after "no thanks" or a settled
+        # concern: a polite "anything else?" with no offer in it.
+        offer = conversation.upsell_quote
+        if conversation.upsell_offered or offer is None or states_amount(reply, offer.total):
+            return reply
+        sentence = get_message(conversation.language, "upsell_offer").format(
+            quantity=offer.quantity, service=offer.service_name, total=offer.total
+        )
+        return f"{reply} {sentence}"
 
     async def _takes_offer(self, conversation: Conversation) -> bool:
         offer = conversation.upsell_quote

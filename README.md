@@ -208,7 +208,9 @@ up:
   `ops-core-api` in the same turn, before the reply is written, so the model is
   handed the total instead of working it out. Every reply is then read back: an
   amount that no quote in hand contains is replaced by a fixed sentence carrying the
-  real total.
+  real total, and the turn that presents a price or makes the upsell offer always
+  states its total, even when the model talked around it. A changed quantity counts
+  only if the customer actually named it.
 - **No database, but a bounded store.** Conversation state lives in-process behind a
   `ConversationRepository` port — the seam a Postgres/Redis store would slot into
   unchanged. It cannot leak: conversations expire after a TTL of inactivity and a

@@ -28,3 +28,9 @@ def test_small_plain_numbers_are_not_amounts() -> None:
 
 def test_with_no_quote_any_amount_is_unquoted() -> None:
     assert unquoted_amounts("Massages start at 120.00.", []) == [Decimal("120.00")]
+
+
+def test_the_order_quantity_is_a_count_not_an_amount() -> None:
+    # As seen live: "500 sessions" before any quote was replaced as an invented price.
+    assert unquoted_amounts("500 Deep Tissue Massage sessions, noted.", [None], quantity=500) == []
+    assert unquoted_amounts("500 sessions come to 1200.00.", [None], quantity=500) == [Decimal("1200.00")]

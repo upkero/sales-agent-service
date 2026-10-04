@@ -18,12 +18,16 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "handoff": "Let me take your details and have a specialist follow up with you directly.",
         "price_pending": "I'll check the exact price as soon as I know the service and how many sessions you'd like.",
         "quote_total": "For {quantity} × {service} the total is {total}.",
+        "upsell_offer": "There is also a better-value option: {quantity} × {service} for {total} in total. "
+        "Would you like that instead?",
     },
     "ru": {
         "clarifier": "Извините, я не расслышал. Не могли бы вы повторить?",
         "handoff": "Давайте я передам вас специалисту, который свяжется с вами и всё уточнит.",
         "price_pending": "Я уточню точную цену, как только буду знать услугу и количество сеансов.",
         "quote_total": "{quantity} × {service}: итого {total}.",
+        "upsell_offer": "Есть и более выгодный вариант: {quantity} × {service}, итого {total}. "
+        "Хотите его вместо текущего?",
     },
 }
 

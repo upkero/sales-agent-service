@@ -28,15 +28,18 @@ _NUMBER = re.compile(r"(?<![\d.,])(\d{1,3}(?:[,\s  ]\d{3})+|\d+)(?:[.,](\d{1,
 _SMALLEST_WHOLE_AMOUNT = 100
 
 
-def unquoted_amounts(reply: str, quotes: Iterable[PriceQuote | None]) -> list[Decimal]:
+def unquoted_amounts(
+    reply: str, quotes: Iterable[PriceQuote | None], quantity: int | None = None
+) -> list[Decimal]:
     """The amounts stated in `reply` that none of `quotes` contains.
 
     A discounted quote's subtotal counts as unquoted when its total is missing:
     "8 sessions come to 960.00" is the pre-discount figure passed off as the
-    price, which is exactly the mistake this check exists for.
+    price, which is exactly the mistake this check exists for. The order's own
+    `quantity` is never an amount: "500 sessions" before any quote is a count.
     """
     stated = _stated_amounts(reply)
-    allowed: set[Decimal] = set()
+    allowed: set[Decimal] = set() if quantity is None else {Decimal(quantity)}
     for quote in quotes:
         if quote is None:
             continue
@@ -45,6 +48,11 @@ def unquoted_amounts(reply: str, quotes: Iterable[PriceQuote | None]) -> list[De
         if quote.discount_amount == 0 or quote.total in stated:
             allowed.add(quote.subtotal)
     return [value for value in stated if value not in allowed]  # Decimal equality: 864 == 864.00
+
+
+def states_amount(reply: str, amount: Decimal) -> bool:
+    """Whether `reply` states `amount` ("864", "864.00" and "864,00" all count)."""
+    return amount in _stated_amounts(reply)
 
 
 def _stated_amounts(reply: str) -> list[Decimal]:

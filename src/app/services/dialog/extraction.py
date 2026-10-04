@@ -5,6 +5,7 @@ QUALIFY fills these slots and PRESENT corrects them when the first guess did not
 price, so the coercion rules live here once rather than being copied into both.
 """
 
+import re
 from collections.abc import Sequence
 
 # ops-core-api rejects a quantity above this with a 422 (`MAX_QUANTITY` in its
@@ -29,6 +30,39 @@ def coerce_quantity(value: object) -> int | None:
         number = int(value)
         return number if 1 <= number <= _MAX_QUANTITY else None
     return None
+
+
+# Number words a customer types instead of digits, in the forms a chat actually uses.
+# NOTE: a quantity written any other way ("a dozen", "восьмерых") is not recognised,
+# so that change is ignored and the agent asks again; extend the table, not the rule.
+_NUMBER_WORDS: dict[int, tuple[str, ...]] = {
+    1: ("one", "один", "одна", "одно", "одного", "одному"),
+    2: ("two", "два", "две", "двух"),
+    3: ("three", "три", "трёх", "трех"),
+    4: ("four", "четыре", "четырёх", "четырех"),
+    5: ("five", "пять", "пяти"),
+    6: ("six", "шесть", "шести"),
+    7: ("seven", "семь", "семи"),
+    8: ("eight", "восемь", "восьми"),
+    9: ("nine", "девять", "девяти"),
+    10: ("ten", "десять", "десяти"),
+    12: ("twelve", "двенадцать", "двенадцати"),
+    15: ("fifteen", "пятнадцать", "пятнадцати"),
+    20: ("twenty", "двадцать", "двадцати"),
+}
+
+
+def mentions_quantity(text: str, quantity: int) -> bool:
+    """Whether the customer's own words name `quantity`, as digits or a number word.
+
+    A changed quantity the model reports must be one the customer said: asked
+    about an offer, a model read "No thanks" as quantity 1 and the order was
+    re-priced to a single session.
+    """
+    if quantity in {int(n) for n in re.findall(r"\d+", text)}:
+        return True
+    words = set(re.findall(r"\w+", text.lower()))
+    return any(word in words for word in _NUMBER_WORDS.get(quantity, ()))
 
 
 def canonical_service(catalogue: Sequence[str], extracted: str) -> str:

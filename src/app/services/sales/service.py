@@ -69,9 +69,8 @@ class SalesService:
         conversation.add_user(message)
 
         current_stage = conversation.stage
-        stage = self._stages[current_stage]
         order_before = (conversation.service, conversation.quantity)
-        result = await stage.handle(conversation)
+        result = await self._stages[current_stage].handle(conversation)
 
         order_changed = (conversation.service, conversation.quantity) != order_before
         if result.next_stage is SalesStage.PRESENT and order_changed and conversation.quote_is_stale:
@@ -85,10 +84,16 @@ class SalesService:
             current_stage = SalesStage.PRESENT
             conversation.stage = current_stage
             result = await self._stages[current_stage].handle(conversation)
-        elif stage.hands_over_on_advance and result.next_stage is not current_stage:
-            # The stage only read the prospect's reaction; the stage it moved to
-            # answers this turn (the upsell offer right after "sounds good"), and
-            # its reply replaces the one that had nothing to say. One hop at most.
+
+        # A stage that only read the prospect's reaction hands the turn to the stage it
+        # moved to, whose reply replaces the one that had nothing to say: the upsell
+        # offer right after "sounds good". A reaction can pass through two: "no thanks,
+        # six is enough" read as a concern is answered and settled by OBJECTION_HANDLING,
+        # and the offer still belongs in this reply, not on the prospect's next message.
+        # Bounded by the number of stages; the funnel only moves forward anyway.
+        for _ in range(len(self._stages)):
+            if not self._stages[current_stage].hands_over_on_advance or result.next_stage is current_stage:
+                break
             self._guard_transition(conversation, current_stage, result.next_stage)
             current_stage = result.next_stage
             conversation.stage = current_stage

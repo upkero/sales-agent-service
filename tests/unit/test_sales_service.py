@@ -164,7 +164,7 @@ async def test_an_objection_is_handled_before_the_upsell() -> None:
             control("I understand, it's an investment.", objection=True),  # PRESENT reads the concern...
             control("Buying a block brings the per-session price down.", resolved=False),  # ...OBJECTION answers it
             control("Glad that helps.", resolved=True),  # OBJECTION reads that it is settled...
-            control("For six you'd unlock a discount."),  # ...UPSELL offers
+            control("Six would be 756.00 with the discount."),  # ...UPSELL offers
             verdict(False),
             control("No problem — two it is."),
         ]
@@ -183,7 +183,30 @@ async def test_an_objection_is_handled_before_the_upsell() -> None:
     assert stages.index(SalesStage.OBJECTION_HANDLING) < stages.index(SalesStage.UPSELL)
     # Each reaction is answered by the stage it leads to, not by a dead end.
     assert outcomes[2].reply == "Buying a block brings the per-session price down."
-    assert outcomes[3].reply == "For six you'd unlock a discount."
+    assert outcomes[3].reply == "Six would be 756.00 with the discount."
+
+
+async def test_a_concern_settled_in_one_message_still_gets_the_offer_in_that_reply() -> None:
+    # As seen live (RU): "no thanks, six is enough" read as a concern and settled at
+    # once. With one hand-over the offer slid onto the next message, the contact.
+    llm = StubLLM(
+        [
+            control("Hello!"),
+            control("Six, got it.", service="Deep Tissue Massage", quantity=6),
+            control("That's 648.00 in total.", objection=False),
+            control("(reaction read)", objection=True),  # PRESENT
+            control("(concern answered)", resolved=True),  # OBJECTION_HANDLING
+            control("For twenty you'd pay 2040.00 instead."),  # UPSELL offers
+        ]
+    )
+    service = build_container(llm, FakePricingGateway()).sales_service
+
+    outcomes = await _drive(service, ["hi", "six deep tissue massages", "no thanks, six is enough"])
+
+    assert outcomes[-1].stage is SalesStage.UPSELL
+    assert outcomes[-1].reply == "For twenty you'd pay 2040.00 instead."
+    conversation = await service._conversations.get(outcomes[-1].conversation_id)
+    assert conversation is not None and conversation.upsell_offered is True
 
 
 async def test_repeated_unparseable_output_escalates_to_a_bounded_handoff() -> None:
