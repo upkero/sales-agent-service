@@ -15,6 +15,7 @@ from logging import getLogger
 from typing import Any
 
 import httpx
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
 from src.app.contracts.pricing import PriceQuote, PricingItem
 from src.app.core.request_id import get_request_id
@@ -220,4 +221,7 @@ def create_pricing_gateway(settings: CoreApiSettings) -> CoreApiPricingGateway:
         headers={"X-API-Key": settings.api_key.get_secret_value()},
         event_hooks={"request": [_inject_request_id]},
     )
+    # A span per attempt, and the `traceparent` that makes ops-core-api's server
+    # span its child. The X-Request-ID hook stays: that is the id logs are joined on.
+    HTTPXClientInstrumentor().instrument_client(client)
     return CoreApiPricingGateway(settings, client)

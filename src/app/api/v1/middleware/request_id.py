@@ -2,6 +2,7 @@ import re
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
+from opentelemetry import trace
 
 from src.app.core.request_id import generate_request_id, set_request_id
 
@@ -23,6 +24,8 @@ def register_request_id_middleware(app: FastAPI) -> None:
         incoming = request.headers.get(_HEADER, "")
         request_id = incoming if _VALID_REQUEST_ID.fullmatch(incoming) else generate_request_id()
         set_request_id(request_id)
+        # On the server span too, so a trace is found by the id a log line shows.
+        trace.get_current_span().set_attribute("request_id", request_id)
         response = await call_next(request)
         response.headers[_HEADER] = request_id
         return response
