@@ -41,9 +41,13 @@ class InMemoryConversationRepository(ConversationRepository):
         ttl_seconds: float,
         max_entries: int,
         clock: Callable[[], float] = time.monotonic,
+        on_evict: Callable[[Conversation], None] | None = None,
     ) -> None:
         self._ttl = ttl_seconds
         self._max = max_entries
+        # Told about every conversation the store drops for age or size, so a
+        # prospect who simply walked away is counted rather than vanishing.
+        self._on_evict = on_evict
         # monotonic by default: measuring elapsed time, so it must be immune to
         # wall-clock jumps. Injectable so tests can advance time deterministically.
         self._clock = clock
@@ -57,7 +61,7 @@ class InMemoryConversationRepository(ConversationRepository):
             return None
         last_seen, conversation = entry
         if self._is_expired(last_seen):
-            del self._store[conversation_id]
+            self._drop(conversation_id)
             return None
         return conversation
 
@@ -81,6 +85,11 @@ class InMemoryConversationRepository(ConversationRepository):
             conversation_id, (last_seen, _) = next(iter(self._store.items()))
             if now - last_seen <= self._ttl:
                 break
-            del self._store[conversation_id]
+            self._drop(conversation_id)
         while len(self._store) > self._max:
-            self._store.popitem(last=False)
+            self._drop(next(iter(self._store)))
+
+    def _drop(self, conversation_id: str) -> None:
+        _, conversation = self._store.pop(conversation_id)
+        if self._on_evict is not None:
+            self._on_evict(conversation)

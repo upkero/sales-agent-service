@@ -11,6 +11,8 @@ import json
 from collections.abc import Callable, Sequence
 from decimal import ROUND_HALF_UP, Decimal
 
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
 from src.app.bootstrap.container import ApplicationContainer
 from src.app.contracts.llm.llm_message import LLMMessage
 from src.app.contracts.llm.llm_response import LLMResponse
@@ -99,6 +101,14 @@ class UnavailablePricingGateway(PricingGateway):
         return False  # models an unreachable ops-core-api
 
 
+# Where the counters land in a test; conftest.py attaches it to the global MeterProvider.
+METRIC_READER = InMemoryMetricReader()
+
+# What every StubLLM reply reports having used, so a test can assert the tokens a
+# turn adds up to without the stub having to know what a token is.
+STUB_USAGE = {"prompt_tokens": 11, "completion_tokens": 7}
+
+
 class StubLLM(LLMClient):
     """A scripted LLM. `script` is one of:
 
@@ -124,7 +134,7 @@ class StubLLM(LLMClient):
     async def complete(self, messages: Sequence[LLMMessage], *, json_mode: bool = False) -> LLMResponse:
         self.calls.append(list(messages))
         self.json_modes.append(json_mode)
-        return LLMResponse(content=self._pick(messages))
+        return LLMResponse(content=self._pick(messages), usage=STUB_USAGE)
 
     async def ping(self) -> bool:
         return True

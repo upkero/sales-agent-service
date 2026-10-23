@@ -12,7 +12,9 @@ import inspect
 from collections.abc import Mapping
 from functools import cached_property
 
+from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.core.metrics import record_outcome
 from src.app.core.settings.agent import get_agent_settings
 from src.app.core.settings.conversation import get_conversation_store_settings
 from src.app.core.settings.core_api import get_core_api_settings
@@ -34,6 +36,12 @@ from src.app.services.sales.service import SalesService
 from src.app.services.sales.tactics import SalesTactic, VolumeDiscountTactic
 
 
+def _count_if_lost(conversation: Conversation) -> None:
+    """A conversation the store drops is a lost sale unless it had already ended."""
+    if not conversation.closed and not conversation.handed_off:
+        record_outcome("evicted", conversation)
+
+
 class ApplicationContainer:
     @cached_property
     def llm_client(self) -> LLMClient:
@@ -49,6 +57,7 @@ class ApplicationContainer:
         return InMemoryConversationRepository(
             ttl_seconds=settings.ttl_seconds,
             max_entries=settings.max_entries,
+            on_evict=_count_if_lost,
         )
 
     @cached_property

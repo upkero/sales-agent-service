@@ -1,6 +1,8 @@
 from logging import getLogger
 from typing import ClassVar
 
+from opentelemetry import trace
+
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.llm.llm_message import LLMMessage
 from src.app.contracts.sales import SalesStage
@@ -115,7 +117,7 @@ class UpsellStage(DialogueStage):
         # The offer and the reply go in as the chat turns they are, not into the
         # system role: the reply is the customer's own words.
         exchange = [LLMMessage(role=message.role, content=message.content) for message in conversation.recent(2)]
-        response = await self._llm.complete([LLMMessage(role="system", content=system), *exchange], json_mode=True)
+        response = await self._complete([LLMMessage(role="system", content=system), *exchange], "upsell_take")
         verdict = extract_json_object(response.content) or {}
         return verdict.get("take") is True
 
@@ -144,6 +146,7 @@ class UpsellStage(DialogueStage):
             # "data" (it tends to repeat the offered quantity either way).
             conversation.service = quote.service_name
             conversation.quantity = quote.quantity
+        trace.get_current_span().add_event("offer_accepted", {"sales.accepted_offer": conversation.accepted_offer})
         logger.info(
             "Offer accepted",
             extra={

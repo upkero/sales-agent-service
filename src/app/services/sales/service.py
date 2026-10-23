@@ -8,14 +8,19 @@ is the guard rail: it refuses any transition a stage was not allowed to make.
 """
 
 import asyncio
+import time
 from collections.abc import Mapping
 from copy import deepcopy
 from logging import getLogger
 from uuid import uuid4
 from weakref import WeakValueDictionary
 
+from opentelemetry import trace
+
 from src.app.contracts.conversation import Conversation, Language
 from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
+from src.app.core.metrics import TransitionPath, record_illegal_transition, record_outcome, record_transition
+from src.app.core.turn_context import TurnStats, set_conversation_id, start_turn_stats
 from src.app.exceptions.dialog import InvalidStageTransitionError
 from src.app.interfaces.conversation_repository import ConversationRepository
 from src.app.services.dialog.stages.base import DialogueStage
@@ -61,14 +66,19 @@ class SalesService:
         message: str,
         language: Language | None,
     ) -> TurnOutcome:
+        started = time.perf_counter()
         conversation = await self._load_or_start(conversation_id, message)
+        # From here every log line of this request names its conversation.
+        set_conversation_id(conversation.id)
+        stats = start_turn_stats()
+        was_closed = conversation.closed
         if language is not None:
             # The caller knows (the site's language switch); that beats any guess,
             # for this turn and every later one that does not say otherwise.
             conversation.language = language
         conversation.add_user(message)
 
-        current_stage = conversation.stage
+        current_stage = stage_start = conversation.stage
         order_before = (conversation.service, conversation.quantity)
         result = await self._stages[current_stage].handle(conversation)
 
@@ -80,7 +90,7 @@ class SalesService:
             # only stall ("let me check") or, worse, work the total out itself. PRESENT
             # takes this same turn instead: it asks ops-core-api first, and its reply,
             # which states the real total, replaces the one without it.
-            self._guard_transition(conversation, current_stage, result.next_stage)
+            self._guard_transition(conversation, current_stage, result.next_stage, "requote")
             current_stage = SalesStage.PRESENT
             conversation.stage = current_stage
             result = await self._stages[current_stage].handle(conversation)
@@ -94,17 +104,27 @@ class SalesService:
         for _ in range(len(self._stages)):
             if result.next_stage is current_stage or not self._stages[current_stage].hands_over(conversation):
                 break
-            self._guard_transition(conversation, current_stage, result.next_stage)
+            self._guard_transition(conversation, current_stage, result.next_stage, "handover")
             current_stage = result.next_stage
             conversation.stage = current_stage
             result = await self._stages[current_stage].handle(conversation)
 
-        self._guard_transition(conversation, current_stage, result.next_stage)
+        self._guard_transition(conversation, current_stage, result.next_stage, "final")
 
         conversation.add_agent(result.reply)
         conversation.stage = result.next_stage
+        # How a conversation ends, counted on the turn it happens and never again.
+        if conversation.closed and not was_closed:
+            record_outcome("closed", conversation)
+            trace.get_current_span().add_event(
+                "sale_closed", {"sales.accepted_offer": conversation.accepted_offer or "none"}
+            )
+        if result.handoff and not conversation.handed_off:
+            conversation.handed_off = True
+            record_outcome("handoff", conversation)
         await self._conversations.save(conversation)
 
+        self._report_turn(conversation, stage_start, started, stats, result.handoff)
         return TurnOutcome(
             conversation_id=conversation.id,
             reply=result.reply,
@@ -148,15 +168,54 @@ class SalesService:
         return self._default_language
 
     @staticmethod
-    def _guard_transition(conversation: Conversation, current: SalesStage, requested: SalesStage) -> None:
+    def _report_turn(
+        conversation: Conversation,
+        stage_start: SalesStage,
+        started: float,
+        stats: TurnStats,
+        handoff: bool,
+    ) -> None:
+        """The turn's one summary line, and the same facts on the request's span."""
+        logger.info(
+            "turn_completed",
+            extra={
+                "from_stage": stage_start.value,
+                "to_stage": conversation.stage.value,
+                "handoff": handoff,
+                "done": conversation.closed,
+                "llm_calls": stats.llm_calls,
+                "input_tokens": stats.input_tokens,
+                "output_tokens": stats.output_tokens,
+                "duration_ms": round((time.perf_counter() - started) * 1000),
+            },
+        )
+        trace.get_current_span().set_attributes(
+            {
+                "sales.conversation_id": conversation.id,
+                "sales.stage.start": stage_start.value,
+                "sales.stage.end": conversation.stage.value,
+                "sales.handoff": handoff,
+                "sales.done": conversation.closed,
+                "sales.llm_calls": stats.llm_calls,
+            }
+        )
+
+    @staticmethod
+    def _guard_transition(
+        conversation: Conversation, current: SalesStage, requested: SalesStage, path: TransitionPath
+    ) -> None:
         """Reject any move a stage was not permitted to make.
 
         A violation is a bug in a stage's route(), not a user error, so it is
         raised as a typed 500 (which the API renders as the uniform error
         envelope, not a stacktrace) rather than asserted — an assert would vanish
         under `python -O` and, if it did fire, escape as an unhandled 500.
+
+        Every move passes through here, which is why it is also where moves are
+        counted: one place cannot miss a path the machine learns later.
         """
         if requested not in ALLOWED_TRANSITIONS[current]:
+            record_illegal_transition(current.value, requested.value)
             logger.error(
                 "Illegal stage transition attempted",
                 extra={
@@ -168,3 +227,8 @@ class SalesService:
             raise InvalidStageTransitionError(
                 extra={"from_stage": current.value, "to_stage": requested.value},
             )
+        record_transition(current.value, requested.value, path)
+        trace.get_current_span().add_event(
+            "stage_transition",
+            {"sales.from_stage": current.value, "sales.to_stage": requested.value, "sales.path": path},
+        )

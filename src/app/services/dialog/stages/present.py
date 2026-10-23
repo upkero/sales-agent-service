@@ -2,6 +2,7 @@ from typing import ClassVar
 
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.core.metrics import record_guardrail
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.pricing import ServiceNotFoundError
 from src.app.interfaces.llm.llm_client import LLMClient
@@ -52,6 +53,7 @@ class PresentStage(DialogueStage):
         except ServiceNotFoundError:
             # Recoverable: the prospect named something not on the list. Drop the
             # stale quote and make sure we can show them what does exist.
+            record_guardrail("unknown_service", self.stage.value)
             conversation.quote = None
             if not conversation.offered_services:
                 conversation.offered_services = tuple(

@@ -21,13 +21,18 @@ from abc import ABC, abstractmethod
 from logging import getLogger
 from typing import ClassVar
 
+from opentelemetry import trace
+
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.llm.llm_message import LLMMessage
+from src.app.contracts.llm.llm_response import LLMResponse
 from src.app.contracts.pricing import PriceQuote
 from src.app.contracts.sales import SalesStage, StageResult
+from src.app.core.metrics import record_guardrail
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.llm.prompt_builder import PromptBuilder
+from src.app.llm.traced import LLMPurpose, traced_complete
 from src.app.messages import get_message
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.amounts import unquoted_amounts
@@ -35,6 +40,7 @@ from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.extraction import canonical_service, coerce_quantity, mentions_quantity
 
 logger = getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 # The `data` fields of a stage that lets the prospect change their order.
 _ORDER_FIELDS = '"service": string|null, "quantity": integer|null'
@@ -88,29 +94,39 @@ class DialogueStage(ABC):
     # Template Method: the fixed skeleton. Do not override.
     # ------------------------------------------------------------------ #
     async def handle(self, conversation: Conversation) -> StageResult:
-        await self.prepare(conversation)
-        messages = self._compose_prompt(conversation)
-        # Debug, not info: this is one line per turn and its only reader is
-        # somebody already looking at a specific conversation.
-        logger.debug(
-            "Sending the %s prompt set",
-            self.stage.value,
-            extra={"conversation_id": conversation.id, "prompt_ids": self._prompt_ids()},
-        )
-        decision = await self._decide(messages)
+        with _tracer.start_as_current_span("sales.stage.handle") as span:
+            span.set_attribute("sales.stage", self.stage.value)
+            span.set_attribute("sales.prompt_ids", self._prompt_ids())
+            await self.prepare(conversation)
+            messages = self._compose_prompt(conversation)
+            # Debug, not info: this is one line per turn and its only reader is
+            # somebody already looking at a specific conversation.
+            logger.debug(
+                "Sending the %s prompt set",
+                self.stage.value,
+                extra={"conversation_id": conversation.id, "prompt_ids": self._prompt_ids()},
+            )
+            decision = await self._decide(messages)
+            span.set_attribute("sales.parse_failed", decision is None)
 
-        if decision is None:
-            # The model broke the control contract. Never route on a guess.
-            return self._on_parse_failure(conversation)
+            if decision is None:
+                # The model broke the control contract. Never route on a guess.
+                result = self._on_parse_failure(conversation)
+                span.set_attribute("sales.next_stage", result.next_stage.value)
+                return result
 
-        conversation.consecutive_parse_failures = 0
-        # Checked against the quotes the model was given, before absorb() can change them.
-        reply = self.ensure_stated(conversation, self._quoted_only(conversation, decision))
-        if self.takes_order_changes:
-            self._absorb_order_change(conversation, decision)
-        self.absorb(conversation, decision)
-        next_stage = self.route(conversation, decision)
-        return StageResult(reply=reply, current_stage=self.stage, next_stage=next_stage)
+            conversation.consecutive_parse_failures = 0
+            # Checked against the quotes the model was given, before absorb() can change them.
+            quoted = self._quoted_only(conversation, decision)
+            reply = self.ensure_stated(conversation, quoted)
+            if reply != quoted:
+                record_guardrail("total_injected", self.stage.value)
+            if self.takes_order_changes:
+                self._absorb_order_change(conversation, decision)
+            self.absorb(conversation, decision)
+            next_stage = self.route(conversation, decision)
+            span.set_attribute("sales.next_stage", next_stage.value)
+            return StageResult(reply=reply, current_stage=self.stage, next_stage=next_stage)
 
     # ------------------------------------------------------------------ #
     # Overridable steps.
@@ -185,15 +201,19 @@ class DialogueStage(ABC):
         return [prompt.id for prompt in (_PERSONA, _OUTPUT_CONTRACT, *order_change, *self.prompts)]
 
     async def _decide(self, messages: list[LLMMessage]) -> AgentDecision | None:
-        response = await self._llm.complete(messages, json_mode=True)
+        response = await self._complete(messages, "reply")
         decision = AgentDecision.parse(response.content)
         if decision is not None:
             return decision
 
         # One strict re-ask fixes the common single hiccup without a visible stall.
         reask = LLMMessage(role="system", content=_STRICT_REASK.text)
-        retry = await self._llm.complete([*messages, reask], json_mode=True)
+        retry = await self._complete([*messages, reask], "reask")
         return AgentDecision.parse(retry.content)
+
+    async def _complete(self, messages: list[LLMMessage], purpose: LLMPurpose) -> LLMResponse:
+        """Every model call a stage makes, so each is a span, a duration and a token count."""
+        return await traced_complete(self._llm, messages, purpose=purpose)
 
     def _on_parse_failure(self, conversation: Conversation) -> StageResult:
         conversation.consecutive_parse_failures += 1
@@ -246,6 +266,7 @@ class DialogueStage(ABC):
                 "amounts": [str(amount) for amount in unquoted],
             },
         )
+        record_guardrail("amount_replaced", self.stage.value)
         quote = conversation.quote
         if quote is None:
             return get_message(conversation.language, "price_pending")
@@ -273,6 +294,8 @@ class DialogueStage(ABC):
             # gave. Once a quote exists, only a real catalogue name may replace it.
             if conversation.quote is None or snapped in conversation.offered_services:
                 conversation.service = snapped
+            else:
+                record_guardrail("unknown_service", self.stage.value)
         quantity = coerce_quantity(decision.data.get("quantity"))
         if (
             quantity is not None

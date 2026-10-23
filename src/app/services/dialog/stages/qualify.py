@@ -3,6 +3,7 @@ from typing import ClassVar
 
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
+from src.app.core.metrics import record_guardrail
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.exceptions.pricing import PricingError
 from src.app.interfaces.llm.llm_client import LLMClient
@@ -42,6 +43,7 @@ class QualifyStage(DialogueStage):
             # Grounding is a nice-to-have; a momentary pricing outage should not
             # block qualifying a prospect. Proceed without the catalogue.
             logger.warning("Catalogue unavailable for grounding: %s", exc, extra={"conversation_id": conversation.id})
+            record_guardrail("catalogue_unavailable", self.stage.value)
             return
         conversation.offered_services = tuple(item.service_name for item in catalogue)
 

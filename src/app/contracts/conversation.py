@@ -69,6 +69,11 @@ class Conversation:
     customer_contact: str | None = None
     closed: bool = False
 
+    # Whether the conversation was handed to a person. Kept so that counting how a
+    # conversation ended counts it once, and so a handed-off one that is later
+    # evicted is not also counted as a lost sale.
+    handed_off: bool = False
+
     # Robustness bookkeeping: how many turns in a row the model returned control
     # output the stage could not parse. Bounded escalation reads this.
     consecutive_parse_failures: int = 0
