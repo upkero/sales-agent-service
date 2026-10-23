@@ -6,42 +6,19 @@ construction: stage names, a few fixed outcomes, model and provider. Never a
 conversation id, a message, a service name or a quantity, which is model free text
 until the catalogue snaps it.
 
-core/telemetry.py (the canonical copy) sets up tracing only, so the provider for
-metrics is built here, on the resource tracing already made.
+The MeterProvider is installed by core/telemetry.py (`setup_metrics`); instruments
+made here against the global meter attach to it whenever it appears.
 """
 
-import os
 from typing import Literal
 
-from opentelemetry import metrics, trace
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import Resource
+from opentelemetry import metrics
 
 from src.app.contracts.conversation import Conversation
 
 Outcome = Literal["closed", "handoff", "evicted"]
 GuardrailKind = Literal["amount_replaced", "total_injected", "unknown_service", "catalogue_unavailable"]
 TransitionPath = Literal["final", "handover", "requote"]
-
-
-def setup_metrics() -> MeterProvider:
-    """Install the process-wide MeterProvider, once (same rules as setup_tracing).
-
-    Call after setup_tracing: the resource is shared, so a metric and a span of
-    this service carry the same service.name. With no collector configured the
-    instruments still count but nothing is exported.
-    """
-    current = metrics.get_meter_provider()
-    if isinstance(current, MeterProvider):
-        return current
-    provider_resource = getattr(trace.get_tracer_provider(), "resource", Resource.create())
-    exporting = bool(os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
-    readers = [PeriodicExportingMetricReader(OTLPMetricExporter())] if exporting else []
-    provider = MeterProvider(resource=provider_resource, metric_readers=readers)
-    metrics.set_meter_provider(provider)
-    return provider
 
 
 _meter = metrics.get_meter("sales-agent-service")

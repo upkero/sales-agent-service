@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from logging import getLogger
 from typing import ParamSpec, TypeVar
 
+from opentelemetry import metrics
 from tenacity import (
     AsyncRetrying,
     RetryCallState,
@@ -19,6 +20,12 @@ from tenacity import (
 )
 
 logger = getLogger(__name__)
+
+# Every retry is counted, so "the upstream is flaky" shows on a graph before it shows as an
+# error. Created here, against the global meter, so this file needs nothing from its service.
+_retries = metrics.get_meter(__name__).create_counter(
+    "upstream.retries", description="Retries of an outbound call, by target and reason."
+)
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -29,15 +36,32 @@ _R = TypeVar("_R")
 MAX_HONOURED_RETRY_AFTER_SECONDS = 5.0
 
 
-def _log_attempt(state: RetryCallState) -> None:
-    exception = state.outcome.exception() if state.outcome else None
-    logger.warning(
-        "Retrying %s after attempt %d: %s",
-        state.fn.__qualname__ if state.fn else "call",
-        state.attempt_number,
-        exception,
-        extra={"attempt": state.attempt_number, "error": str(exception)},
-    )
+def _retry_reason(exception: BaseException | None) -> str:
+    """Why a call is being retried, as a bounded label: never the exception's message.
+
+    Duck-typed like `_retry_after_seconds`: an upstream that answered is named by its
+    status class (`429` and `5xx`), one that did not by the exception's class.
+    """
+    response = getattr(exception, "response", None)
+    status = getattr(response, "status_code", None)
+    if isinstance(status, int):
+        return "429" if status == 429 else f"{status // 100}xx"
+    return type(exception).__name__
+
+
+def _log_attempt(target: str) -> Callable[[RetryCallState], None]:
+    def _log(state: RetryCallState) -> None:
+        exception = state.outcome.exception() if state.outcome else None
+        _retries.add(1, {"target": target, "reason": _retry_reason(exception)})
+        logger.warning(
+            "Retrying %s after attempt %d: %s",
+            target,
+            state.attempt_number,
+            exception,
+            extra={"attempt": state.attempt_number, "error": str(exception)},
+        )
+
+    return _log
 
 
 def _retry_after_seconds(exception: BaseException) -> float | None:
@@ -98,6 +122,7 @@ def retry_async(
     attempts: int,
     retry_on: type[Exception] | tuple[type[Exception], ...],
     max_wait_seconds: float = 2.0,
+    target: str = "unknown",
 ) -> Callable[[Callable[_P, Awaitable[_R]]], Callable[_P, Awaitable[_R]]]:
     """Retry an async call with exponential backoff, jitter and `Retry-After`.
 
@@ -114,6 +139,9 @@ def retry_async(
 
     A `Retry-After` above `MAX_HONOURED_RETRY_AFTER_SECONDS` ends the retries
     at once and re-raises, so the caller's own 429 handling passes it on.
+
+    `target` names what is being called ("ops_core.search"), for the retry log line
+    and the `upstream.retries` counter. A fixed name, never anything per-request.
     """
 
     def decorator(func: Callable[_P, Awaitable[_R]]) -> Callable[_P, Awaitable[_R]]:
@@ -122,7 +150,7 @@ def retry_async(
                 stop=_stop(attempts),
                 wait=_wait_honouring_retry_after(max_wait_seconds),
                 retry=retry_if_exception_type(retry_on),
-                before_sleep=_log_attempt,
+                before_sleep=_log_attempt(target),
                 reraise=True,
             )
             async for attempt in retrying:

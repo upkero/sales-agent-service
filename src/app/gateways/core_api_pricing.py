@@ -72,7 +72,9 @@ class CoreApiPricingGateway(PricingGateway):
         self._client = client
         # Bind the retry policy once, from settings, rather than decorating the
         # method at import time with a hard-coded attempt count.
-        self._retrying_send = retry_async(attempts=settings.max_attempts, retry_on=_TransientError)(self._send_once)
+        self._retrying_send = retry_async(
+            attempts=settings.max_attempts, retry_on=_TransientError, target="ops_core.pricing"
+        )(self._send_once)
 
     async def quote(self, service: str, quantity: int) -> PriceQuote:
         payload = await self._send(

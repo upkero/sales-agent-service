@@ -13,9 +13,6 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from src.app.api.v1.middleware.rate_limit import _masked
 from src.app.bootstrap.container import _count_if_lost
@@ -34,8 +31,8 @@ from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.dialog.stages.present import PresentStage
 from src.app.services.sales.service import SalesService
 from src.main import create_app
+from tests import telemetry
 from tests.fakes import (
-    METRIC_READER,
     STUB_USAGE,
     FakePricingGateway,
     StubLLM,
@@ -45,40 +42,18 @@ from tests.fakes import (
     verdict,
 )
 
-# Set once per process: OTel refuses to replace a global provider, and src.main
-# installs one at import.
-_exporter = InMemorySpanExporter()
-
 
 @pytest.fixture
-def spans() -> Iterator[InMemorySpanExporter]:
-    create_app()  # the app factory installs the tracer provider
-    provider = trace.get_tracer_provider()
-    assert isinstance(provider, TracerProvider)
-    if not getattr(provider, "_test_exporter_added", False):
-        provider.add_span_processor(SimpleSpanProcessor(_exporter))
-        provider._test_exporter_added = True  # type: ignore[attr-defined]
-    _exporter.clear()
-    yield _exporter
-    _exporter.clear()
-
-
-def _points(name: str) -> list[Any]:
-    data = METRIC_READER.get_metrics_data()
-    return [
-        point
-        for resource in (data.resource_metrics if data else [])
-        for scope in resource.scope_metrics
-        for metric in scope.metrics
-        if metric.name == name
-        for point in metric.data.data_points
-    ]
+def spans() -> Iterator[None]:
+    telemetry.clear_spans()
+    yield
+    telemetry.clear_spans()
 
 
 def _count(name: str, *labels: str) -> Counter[tuple[str, ...]]:
     """A counter's values keyed by the given label values (cumulative: take a before and subtract)."""
     counts: Counter[tuple[str, ...]] = Counter()
-    for point in _points(name):
+    for point in telemetry.points(name):
         counts[tuple(point.attributes[label] for label in labels)] += point.value
     return counts
 
@@ -109,7 +84,7 @@ async def _walk(service: SalesService) -> str:
 
 
 async def test_a_conversation_from_greeting_to_close_counts_exactly_its_transitions(
-    spans: InMemorySpanExporter,
+    spans: None,
 ) -> None:
     before = _count("sales.stage.transitions", *_TRANSITION_LABELS)
     outcomes_before = _count("sales.outcomes", *_OUTCOME_LABELS)
@@ -129,13 +104,13 @@ async def test_a_conversation_from_greeting_to_close_counts_exactly_its_transiti
     assert _count("sales.outcomes", *_OUTCOME_LABELS) - outcomes_before == {("closed", "base", "close"): 1}
 
 
-async def test_every_model_call_is_a_span_with_its_usage_and_purpose(spans: InMemorySpanExporter) -> None:
-    duration_before = sum(point.count for point in _points("gen_ai.client.operation.duration"))
+async def test_every_model_call_is_a_span_with_its_usage_and_purpose(spans: None) -> None:
+    duration_before = telemetry.reading("gen_ai.client.operation.duration")
     service = build_container(StubLLM(list(_JOURNEY)), FakePricingGateway()).sales_service
 
     await _walk(service)
 
-    chats = [span for span in spans.get_finished_spans() if span.name == "chat stub-model"]
+    chats = [span for span in telemetry.finished_spans() if span.name == "chat stub-model"]
     assert len(chats) == len(_JOURNEY)
     for span in chats:
         assert span.attributes is not None
@@ -144,15 +119,15 @@ async def test_every_model_call_is_a_span_with_its_usage_and_purpose(spans: InMe
         assert span.attributes["gen_ai.usage.output_tokens"] == STUB_USAGE["completion_tokens"]
     purposes = Counter(span.attributes["sales.llm.purpose"] for span in chats if span.attributes)
     assert purposes == {"reply": 7, "upsell_take": 1}
-    assert sum(point.count for point in _points("gen_ai.client.operation.duration")) - duration_before == len(_JOURNEY)
+    assert telemetry.reading("gen_ai.client.operation.duration") - duration_before == len(_JOURNEY)
 
 
-async def test_a_reask_is_labelled_as_one(spans: InMemorySpanExporter) -> None:
+async def test_a_reask_is_labelled_as_one(spans: None) -> None:
     service = build_container(StubLLM(["not json", control("Hello!")]), FakePricingGateway()).sales_service
 
     await service.take_turn(None, "hi")
 
-    chats = [span for span in spans.get_finished_spans() if span.name.startswith("chat ")]
+    chats = [span for span in telemetry.finished_spans() if span.name.startswith("chat ")]
     assert [span.attributes["sales.llm.purpose"] for span in chats if span.attributes] == ["reply", "reask"]
 
 
@@ -162,14 +137,14 @@ def _attribute_values(span: Any) -> list[Any]:
     return [*(span.attributes or {}).values(), *events]
 
 
-async def test_the_customers_words_never_reach_a_span(spans: InMemorySpanExporter) -> None:
+async def test_the_customers_words_never_reach_a_span(spans: None) -> None:
     service = build_container(StubLLM(list(_JOURNEY)), FakePricingGateway()).sales_service
 
     await _walk(service)
 
     values = [
         str(value)
-        for span in spans.get_finished_spans()
+        for span in telemetry.finished_spans()
         for value in _attribute_values(span)
     ]
     assert values
@@ -178,7 +153,7 @@ async def test_the_customers_words_never_reach_a_span(spans: InMemorySpanExporte
 
 
 async def test_the_turn_reports_what_it_cost_on_one_line_and_on_its_span(
-    spans: InMemorySpanExporter, caplog: pytest.LogCaptureFixture
+    spans: None, caplog: pytest.LogCaptureFixture
 ) -> None:
     service = build_container(StubLLM(list(_JOURNEY)), FakePricingGateway()).sales_service
 
@@ -195,7 +170,7 @@ async def test_the_turn_reports_what_it_cost_on_one_line_and_on_its_span(
     assert "dana@example.com" not in str(lines)
 
 
-async def test_a_failed_model_call_is_recorded_by_its_type_only(spans: InMemorySpanExporter) -> None:
+async def test_a_failed_model_call_is_recorded_by_its_type_only(spans: None) -> None:
     class Failing(StubLLM):
         async def complete(self, messages: Sequence[LLMMessage], *, json_mode: bool = False) -> LLMResponse:
             raise LLMGenerationError("secret provider detail")
@@ -205,7 +180,7 @@ async def test_a_failed_model_call_is_recorded_by_its_type_only(spans: InMemoryS
     with pytest.raises(LLMGenerationError):
         await service.take_turn(None, "hi")
 
-    (chat,) = (span for span in spans.get_finished_spans() if span.name == "chat stub-model")
+    (chat,) = (span for span in telemetry.finished_spans() if span.name == "chat stub-model")
     assert chat.attributes is not None
     assert chat.attributes["error.type"] == "LLMGenerationError"
     assert chat.status.status_code is trace.StatusCode.ERROR

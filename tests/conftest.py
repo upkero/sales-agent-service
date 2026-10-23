@@ -15,21 +15,13 @@ os.environ.setdefault("TURN_RATE_LIMIT_PER_MINUTE", "5")
 from collections.abc import Iterator  # noqa: E402
 
 import pytest  # noqa: E402
-from opentelemetry import metrics  # noqa: E402
-from opentelemetry.sdk.metrics import MeterProvider  # noqa: E402
 from pydantic_settings import BaseSettings  # noqa: E402
 
 import src.app.core.settings.logging  # noqa: E402,F401 (imported for the loop below)
 from src.app.api.v1.middleware.rate_limit import reset_rate_limit  # noqa: E402
 from src.app.core.settings.agent import SalesAgentSettings  # noqa: E402
-from tests.fakes import METRIC_READER, FakePricingGateway  # noqa: E402
-
-# The global MeterProvider can be set once per process, and src.main installs one at
-# import. Installing this one first is what lets a test read the counters; the app's
-# own setup_metrics() sees a provider already in place and leaves it alone. The
-# reader lives in tests/fakes.py: a test cannot import it from here, because pytest
-# loads this file under its own name and a second import would run it again.
-metrics.set_meter_provider(MeterProvider(metric_readers=[METRIC_READER]))
+from tests import telemetry  # noqa: E402,F401 (installs the in-memory span and metric sinks)
+from tests.fakes import FakePricingGateway  # noqa: E402
 
 # A developer's .env must not leak into the tests: a SECURITY_API_KEY there turns
 # every turn into a 401, an AGENT_LANGUAGE=ru changes the replies. Every settings
