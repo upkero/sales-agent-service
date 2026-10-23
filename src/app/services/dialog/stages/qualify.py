@@ -16,6 +16,7 @@ from src.app.services.dialog.stages.base import DialogueStage
 logger = getLogger(__name__)
 
 _QUALIFY = get_prompt("stage_qualify")
+_MAX_QUANTITY_ASKS = 2
 
 
 class QualifyStage(DialogueStage):
@@ -66,6 +67,13 @@ class QualifyStage(DialogueStage):
         quantity = coerce_quantity(decision.data.get("quantity"))
         if quantity is not None:
             conversation.quantity = quantity
+        elif conversation.service is not None:
+            # A prospect who asks the price, or says "book me in", without a number
+            # was otherwise asked "how many sessions?" on every turn, forever.
+            conversation.quantity_asks += 1
+            if conversation.quantity_asks >= _MAX_QUANTITY_ASKS:
+                conversation.quantity = 1
+                record_guardrail("quantity_defaulted", self.stage.value)
 
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
         # Deterministic: advance only when both slots are actually filled.

@@ -40,6 +40,9 @@ class Conversation:
     # Qualification slots, filled during QUALIFY and read by PRESENT.
     service: str | None = None
     quantity: int | None = None
+    # QUALIFY turns that knew the service but still got no number. After two the
+    # agent takes one session rather than ask "how many?" a third time.
+    quantity_asks: int = 0
 
     # The last quote shown to the prospect, so OBJECTION_HANDLING and UPSELL can
     # talk about a concrete number instead of re-deriving it.

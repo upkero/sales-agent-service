@@ -47,6 +47,33 @@ async def test_stays_in_qualify_until_quantity_is_known(
     assert result.next_stage is SalesStage.QUALIFY
 
 
+async def test_takes_one_session_when_the_number_never_comes(
+    agent_settings: SalesAgentSettings,
+    pricing: FakePricingGateway,
+) -> None:
+    """ "How much is it?", "book me in": asked twice with no number, price one session."""
+    stage = QualifyStage(
+        StubLLM(
+            [
+                control("How many sessions?", service="Deep Tissue Massage"),
+                control("How many sessions would you like?", service="Deep Tissue Massage"),
+            ]
+        ),
+        agent_settings,
+        pricing,
+    )
+    conversation = _qualifying_conversation()
+
+    first = await stage.handle(conversation)
+    assert conversation.quantity is None
+    assert first.next_stage is SalesStage.QUALIFY
+
+    conversation.add_user("Okay, book me in")
+    second = await stage.handle(conversation)
+    assert conversation.quantity == 1
+    assert second.next_stage is SalesStage.PRESENT
+
+
 async def test_snaps_a_loose_name_onto_the_exact_catalogue_name(
     agent_settings: SalesAgentSettings,
     pricing: FakePricingGateway,

@@ -17,7 +17,9 @@ from opentelemetry import metrics
 from src.app.contracts.conversation import Conversation
 
 Outcome = Literal["closed", "handoff", "evicted"]
-GuardrailKind = Literal["amount_replaced", "total_injected", "unknown_service", "catalogue_unavailable"]
+GuardrailKind = Literal[
+    "amount_replaced", "total_injected", "unknown_service", "catalogue_unavailable", "quantity_defaulted"
+]
 TransitionPath = Literal["final", "handover", "requote"]
 
 
