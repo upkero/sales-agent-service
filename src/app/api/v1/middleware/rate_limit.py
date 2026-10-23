@@ -9,6 +9,7 @@ guarded path, the decorator machinery and its route-resolution quirks buy nothin
 over counting the hit in one middleware.
 """
 
+import ipaddress
 import time
 from collections.abc import Awaitable, Callable
 from logging import getLogger
@@ -44,6 +45,17 @@ def _client_key(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _masked(identifier: str) -> str:
+    """The client's network, not the client: the /24 of an IPv4 address, the /48 of an
+    IPv6 one. Enough to see that one source is hammering the endpoint, too coarse to
+    name a person. The limiter still counts the full address; only the log is masked."""
+    try:
+        address = ipaddress.ip_address(identifier)
+    except ValueError:
+        return identifier  # "unknown", from a transport with no peer
+    return str(ipaddress.ip_network(f"{address}/{24 if address.version == 4 else 48}", strict=False))
+
+
 def register_rate_limiting(app: FastAPI) -> None:
     limit = parse(f"{get_app_settings().turn_rate_limit_per_minute}/minute")
 
@@ -59,7 +71,8 @@ def register_rate_limiting(app: FastAPI) -> None:
 
         identifier = _client_key(request)
         if not _limiter.hit(limit, identifier, _GUARDED_PATH):
-            logger.warning("Turn rate limit exceeded for %s", identifier, extra={"client": identifier})
+            client = _masked(identifier)
+            logger.warning("Turn rate limit exceeded for %s", client, extra={"client": client})
             # Returned rather than raised: exception handlers live inside the
             # middleware stack, so a raise here escapes them and becomes a 500.
             return error_response_from_exception(
