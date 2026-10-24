@@ -89,9 +89,11 @@ def instrument_app(app: FastAPI) -> None:
 
     Call it last in the app factory, so the server span is the outermost layer and also
     wraps the other middleware (a rate limiter's 429 is a span like any other response).
+    Without the ASGI `http send` / `http receive` child spans: one per message, so a
+    streamed response is mostly those, and they carry nothing the server span lacks.
     """
     _use_route_templates()
-    FastAPIInstrumentor.instrument_app(app)
+    FastAPIInstrumentor.instrument_app(app, exclude_spans=["receive", "send"])
 
 
 def route_template(app: FastAPI, path: str) -> str:
