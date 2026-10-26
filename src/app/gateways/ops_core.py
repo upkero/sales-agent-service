@@ -20,7 +20,7 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from src.app.contracts.pricing import PriceQuote, PricingItem
 from src.app.core.request_id import get_request_id
 from src.app.core.resilience import retry_async
-from src.app.core.settings.core_api import CoreApiSettings
+from src.app.core.settings.ops_core import OpsCoreSettings
 from src.app.exceptions.pricing import (
     PricingError,
     PricingRateLimitedError,
@@ -66,8 +66,8 @@ class _TransientError(Exception):
         self.response = response
 
 
-class CoreApiPricingGateway(PricingGateway):
-    def __init__(self, settings: CoreApiSettings, client: httpx.AsyncClient) -> None:
+class OpsCoreGateway(PricingGateway):
+    def __init__(self, settings: OpsCoreSettings, client: httpx.AsyncClient) -> None:
         self._settings = settings
         self._client = client
         # Bind the retry policy once, from settings, rather than decorating the
@@ -215,7 +215,7 @@ async def _inject_request_id(request: httpx.Request) -> None:
         request.headers["X-Request-ID"] = request_id
 
 
-def create_pricing_gateway(settings: CoreApiSettings) -> CoreApiPricingGateway:
+def create_pricing_gateway(settings: OpsCoreSettings) -> OpsCoreGateway:
     """Factory: the one place the HTTP client for ops-core-api is built."""
     client = httpx.AsyncClient(
         base_url=settings.base_url,
@@ -226,4 +226,4 @@ def create_pricing_gateway(settings: CoreApiSettings) -> CoreApiPricingGateway:
     # A span per attempt, and the `traceparent` that makes ops-core-api's server
     # span its child. The X-Request-ID hook stays: that is the id logs are joined on.
     HTTPXClientInstrumentor().instrument_client(client)
-    return CoreApiPricingGateway(settings, client)
+    return OpsCoreGateway(settings, client)

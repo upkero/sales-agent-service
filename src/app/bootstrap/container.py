@@ -17,9 +17,9 @@ from src.app.contracts.sales import SalesStage
 from src.app.core.metrics import record_outcome
 from src.app.core.settings.agent import get_agent_settings
 from src.app.core.settings.conversation import get_conversation_store_settings
-from src.app.core.settings.core_api import get_core_api_settings
 from src.app.core.settings.llm import get_llm_settings
-from src.app.gateways.core_api_pricing import create_pricing_gateway
+from src.app.core.settings.ops_core import get_ops_core_settings
+from src.app.gateways.ops_core import create_pricing_gateway
 from src.app.interfaces.conversation_repository import ConversationRepository
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
@@ -49,7 +49,7 @@ class ApplicationContainer:
 
     @cached_property
     def pricing_gateway(self) -> PricingGateway:
-        return create_pricing_gateway(get_core_api_settings())
+        return create_pricing_gateway(get_ops_core_settings())
 
     @cached_property
     def conversation_repository(self) -> ConversationRepository:

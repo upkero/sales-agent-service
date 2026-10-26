@@ -9,22 +9,22 @@ import pytest
 from pydantic import SecretStr
 
 from src.app.core.request_id import set_request_id
-from src.app.core.settings.core_api import CoreApiSettings
+from src.app.core.settings.ops_core import OpsCoreSettings
 from src.app.exceptions.pricing import (
     PricingError,
     PricingRateLimitedError,
     PricingUnavailableError,
     ServiceNotFoundError,
 )
-from src.app.gateways.core_api_pricing import CoreApiPricingGateway, _inject_request_id
+from src.app.gateways.ops_core import OpsCoreGateway, _inject_request_id
 
 _ATTEMPTS = 2
 
 
-def _gateway(handler: httpx.MockTransport) -> CoreApiPricingGateway:
-    settings = CoreApiSettings(api_key=SecretStr("test-key-1234567890"), max_attempts=_ATTEMPTS)
+def _gateway(handler: httpx.MockTransport) -> OpsCoreGateway:
+    settings = OpsCoreSettings(api_key=SecretStr("test-key-1234567890"), max_attempts=_ATTEMPTS)
     client = httpx.AsyncClient(transport=handler, base_url=settings.base_url)
-    return CoreApiPricingGateway(settings, client)
+    return OpsCoreGateway(settings, client)
 
 
 async def test_a_persistent_429_becomes_a_429_with_retry_after() -> None:
@@ -67,7 +67,7 @@ async def test_the_incoming_request_id_travels_to_ops_core_api() -> None:
         sent.append(request)
         return httpx.Response(200, json=_QUOTE_BODY)
 
-    settings = CoreApiSettings(api_key=SecretStr("test-key-1234567890"))
+    settings = OpsCoreSettings(api_key=SecretStr("test-key-1234567890"))
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(respond),
         base_url=settings.base_url,
@@ -75,7 +75,7 @@ async def test_the_incoming_request_id_travels_to_ops_core_api() -> None:
     )
     set_request_id("turn-42")
 
-    await CoreApiPricingGateway(settings, client).quote("Deep Tissue Massage", 3)
+    await OpsCoreGateway(settings, client).quote("Deep Tissue Massage", 3)
 
     # One id spans both services' logs, which is the whole point of accepting
     # the header at the edge and never forwarding it.

@@ -64,7 +64,7 @@ api/  →  services/  →  interfaces/  ←  gateways/ · repositories/ · llm/
 - **`services/`** — the dialogue itself: the stage machine and the orchestrator.
 - **`interfaces/`** — the ports (ABCs) the services depend on.
 - **`gateways/`** vs **`repositories/`** — a gateway is somebody else's service
-  over the network (`gateways/core_api_pricing.py`); a repository is a store this
+  over the network (`gateways/ops_core.py`); a repository is a store this
   service owns (`repositories/memory_conversation.py`, in memory today, a Postgres
   table the day a conversation has to survive a restart). Both directories exist
   here on purpose — that is the rule working, not an oversight.
@@ -79,10 +79,10 @@ Patterns you can point at (each is commented in the code as a teaching example):
 | Pattern | Where | Why |
 |---|---|---|
 | **Template Method** | `services/dialog/stages/base.py` | Fixed turn skeleton; stages override only their directive and transition |
-| **Adapter** | `gateways/core_api_pricing.py` | An HTTP client that satisfies a port shaped like a plain data repository |
+| **Adapter** | `gateways/ops_core.py` | An HTTP client that satisfies a port shaped like a plain data repository |
 | **Repository** | `interfaces/conversation_repository.py` + `repositories/memory_conversation.py` | Conversation storage behind an abstraction, swappable for a DB later |
 | **Strategy** | `services/sales/tactics.py` | Interchangeable rule for *what* to upsell |
-| **Factory** | `llm/factory.py`, `gateways/core_api_pricing.py` | The one place each external client is constructed |
+| **Factory** | `llm/factory.py`, `gateways/ops_core.py` | The one place each external client is constructed |
 | **Dependency Inversion** | everywhere in `services/` | Services depend on `interfaces/` (ABCs), not concrete classes |
 
 ## Quickstart
