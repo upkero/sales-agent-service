@@ -2,6 +2,7 @@ import asyncio
 import time
 from collections.abc import Mapping, Sequence
 from typing import Any
+from urllib.parse import urlparse
 
 from openai import OpenAIError
 
@@ -24,6 +25,10 @@ class OpenAICompatibleLLMClient(LLMClient):
     def __init__(self, *, settings: LLMSettings, client: Any) -> None:
         self._settings = settings
         self._client = client
+        server = urlparse(settings.base_url or "").hostname or ""
+        # The one provider with a request flag we use: it makes the reply carry the exact
+        # cost of the call. Sent to any other endpoint it is an unknown parameter.
+        self._is_openrouter = server == "openrouter.ai" or server.endswith(".openrouter.ai")
         self._ping_result: bool | None = None
         self._ping_expires = 0.0
         self._ping_lock = asyncio.Lock()
@@ -37,7 +42,7 @@ class OpenAICompatibleLLMClient(LLMClient):
 
     @property
     def provider_name(self) -> str:
-        return self._settings.provider
+        return "openrouter" if self._is_openrouter else self._settings.provider
 
     async def complete(self, messages: Sequence[LLMMessage], *, json_mode: bool = False) -> LLMResponse:
         if not messages:
@@ -91,6 +96,8 @@ class OpenAICompatibleLLMClient(LLMClient):
             params["max_tokens"] = self._settings.max_tokens
         if self._settings.reasoning_effort is not None:
             params["reasoning_effort"] = self._settings.reasoning_effort
+        if self._is_openrouter:
+            params["extra_body"] = {"usage": {"include": True}}
         return params
 
     def _build_response(self, completion: Any) -> LLMResponse:
@@ -106,6 +113,7 @@ class OpenAICompatibleLLMClient(LLMClient):
             finish_reason=getattr(choice, "finish_reason", None),
             usage=self._usage_to_mapping(getattr(completion, "usage", None)),
             metadata=self._metadata(completion),
+            cost=self._cost(getattr(completion, "usage", None)),
         )
 
     @staticmethod
@@ -125,6 +133,12 @@ class OpenAICompatibleLLMClient(LLMClient):
             if isinstance(value, int):
                 result[field] = value
         return result or None
+
+    @staticmethod
+    def _cost(usage: Any) -> float | None:
+        # Only OpenRouter reports it, and the SDK keeps unknown usage fields as attributes.
+        cost = getattr(usage, "cost", None)
+        return float(cost) if isinstance(cost, int | float) else None
 
     @staticmethod
     def _metadata(completion: Any) -> Mapping[str, object]:

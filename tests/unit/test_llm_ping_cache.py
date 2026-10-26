@@ -19,7 +19,7 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> type[_Clock]:
 
 
 def _client(sdk: MagicMock, ok_ttl: float = 30.0, failed_ttl: float = 5.0) -> OpenAICompatibleLLMClient:
-    settings = MagicMock(ping_ok_ttl_seconds=ok_ttl, ping_failed_ttl_seconds=failed_ttl)
+    settings = MagicMock(base_url=None, ping_ok_ttl_seconds=ok_ttl, ping_failed_ttl_seconds=failed_ttl)
     return OpenAICompatibleLLMClient(settings=settings, client=sdk)
 
 

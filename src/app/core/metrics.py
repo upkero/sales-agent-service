@@ -43,6 +43,9 @@ _llm_duration = _meter.create_histogram(
 _llm_tokens = _meter.create_histogram(
     "gen_ai.client.token.usage", unit="{token}", description="Tokens a model call used."
 )
+_llm_cost = _meter.create_counter(
+    "llm.cost", description="LLM spend in USD, as reported by the provider (OpenRouter usage.cost)."
+)
 
 
 def record_transition(from_stage: str, to_stage: str, path: TransitionPath) -> None:
@@ -83,3 +86,7 @@ def record_llm_call(
     for token_type, count in (("input", input_tokens), ("output", output_tokens)):
         if count is not None:
             _llm_tokens.record(count, {**attributes, "gen_ai.token.type": token_type})
+
+
+def record_llm_cost(*, provider: str, model: str, cost: float) -> None:
+    _llm_cost.add(cost, {"provider": provider, "model": model})
