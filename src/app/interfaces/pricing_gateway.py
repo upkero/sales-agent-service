@@ -30,6 +30,6 @@ class PricingGateway(ABC):
 
     @abstractmethod
     async def ping(self) -> bool:
-        """Is the price source reachable right now? A cheap, unauthenticated,
-        no-retry liveness check for the readiness probe — True if up, False if not,
+        """Is the price source ready right now? A cheap, authenticated, no-retry
+        readiness check for the readiness probe — True if up, False if not,
         never raising."""
