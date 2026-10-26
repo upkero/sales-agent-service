@@ -23,7 +23,16 @@ from src.app.repositories.memory_conversation import InMemoryConversationReposit
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.stages.base import DialogueStage
 from src.app.services.sales.service import SalesService
-from tests.fakes import FakePricingGateway, StubLLM, UnavailablePricingGateway, build_container, control, verdict
+from tests.fakes import (
+    FakeLeadGateway,
+    FakePricingGateway,
+    StubLLM,
+    UnavailableLeadGateway,
+    UnavailablePricingGateway,
+    build_container,
+    control,
+    verdict,
+)
 
 
 async def _drive(
@@ -145,13 +154,54 @@ async def test_after_agreeing_the_agent_asks_for_a_contact_once_then_closes() ->
     ]
     system_prompts = [call[0].content for call in llm.calls]
     assert sum("phone number or email" in prompt for prompt in system_prompts) == 1
-    assert sum("Their order:" in prompt for prompt in system_prompts) == 1
+    assert sum("Their request:" in prompt for prompt in system_prompts) == 1
     # Not an instruction on every turn any more, which is what made the line repeat.
     assert "front desk" not in get_prompt("persona").text
     conversation = await service._conversations.get(outcomes[-1].conversation_id)
     assert conversation is not None
     assert conversation.accepted_offer == "base"
     assert conversation.closed is True
+
+
+def _journey_to_close(name: str, contact: str) -> StubLLM:
+    return StubLLM(
+        [
+            control("Hi!"),
+            control("Three, got it.", service="Deep Tissue Massage", quantity=3),
+            control("That comes to 360.00.", objection=False),
+            control("(reaction read)", accept=False),
+            control("(upsell offer)"),
+            verdict(False),
+            control("(asks for details)"),
+            control("Thanks! Your request is in; the front desk will contact you.", name=name, contact=contact),
+        ]
+    )
+
+
+_CLOSE_MESSAGES = ["hi", "three massages", "OK, sounds good", "no, three is fine", "Dana, 555-0100"]
+
+
+async def test_a_closed_conversation_leaves_a_lead_for_the_front_desk() -> None:
+    leads = FakeLeadGateway()
+    service = build_container(_journey_to_close("Dana", "555-0100"), FakePricingGateway(), leads).sales_service
+
+    outcomes = await _drive(service, _CLOSE_MESSAGES)
+
+    assert outcomes[-1].done is True
+    (lead,) = leads.leads
+    assert lead.conversation_id == outcomes[-1].conversation_id
+    assert (lead.name, lead.contact) == ("Dana", "555-0100")
+    assert (lead.service, lead.quantity, lead.total) == ("Deep Tissue Massage", 3, Decimal("360.00"))
+
+
+async def test_the_sale_closes_even_when_the_lead_cannot_be_saved() -> None:
+    leads = UnavailableLeadGateway()
+    service = build_container(_journey_to_close("Dana", "555-0100"), FakePricingGateway(), leads).sales_service
+
+    outcomes = await _drive(service, _CLOSE_MESSAGES)
+
+    assert outcomes[-1].done is True
+    assert leads.attempts == 1
 
 
 async def test_an_objection_is_handled_before_the_upsell() -> None:

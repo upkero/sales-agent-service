@@ -12,10 +12,13 @@ from collections.abc import Callable, Sequence
 from decimal import ROUND_HALF_UP, Decimal
 
 from src.app.bootstrap.container import ApplicationContainer
+from src.app.contracts.lead import Lead
 from src.app.contracts.llm.llm_message import LLMMessage
 from src.app.contracts.llm.llm_response import LLMResponse
 from src.app.contracts.pricing import PriceQuote, PricingItem
+from src.app.exceptions.lead import LeadNotSavedError
 from src.app.exceptions.pricing import PricingUnavailableError, ServiceNotFoundError
+from src.app.interfaces.lead_gateway import LeadGateway
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
 
@@ -99,6 +102,27 @@ class UnavailablePricingGateway(PricingGateway):
         return False  # models an unreachable ops-core-api
 
 
+class FakeLeadGateway(LeadGateway):
+    """Keeps the leads it was given, so a test can read what the front desk would see."""
+
+    def __init__(self) -> None:
+        self.leads: list[Lead] = []
+
+    async def save_lead(self, lead: Lead) -> None:
+        self.leads.append(lead)
+
+
+class UnavailableLeadGateway(LeadGateway):
+    """Every save fails the way an unreachable ops-core-api fails."""
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    async def save_lead(self, lead: Lead) -> None:
+        self.attempts += 1
+        raise LeadNotSavedError()
+
+
 # What every StubLLM reply reports having used, so a test can assert the tokens a
 # turn adds up to without the stub having to know what a token is.
 STUB_USAGE = {"prompt_tokens": 11, "completion_tokens": 7}
@@ -158,14 +182,15 @@ def verdict(take: bool) -> str:
     return json.dumps({"take": take})
 
 
-def build_container(llm: LLMClient, pricing: PricingGateway) -> ApplicationContainer:
-    """A real container with the two external dependencies pre-injected.
+def build_container(llm: LLMClient, pricing: PricingGateway, leads: LeadGateway | None = None) -> ApplicationContainer:
+    """A real container with the external dependencies pre-injected.
 
     Presetting the cached_property slots means the real wiring (the stage
     registry, the orchestrator, the in-memory store) is exercised end to end,
-    while the LLM and ops-core-api are the only things faked.
+    while the LLM and ops-core-api (prices and leads) are the only things faked.
     """
     container = ApplicationContainer()
     container.__dict__["llm_client"] = llm
     container.__dict__["pricing_gateway"] = pricing
+    container.__dict__["lead_gateway"] = leads or FakeLeadGateway()
     return container

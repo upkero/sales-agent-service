@@ -4,12 +4,18 @@ Only the wire is faked, so the retry policy, the status mapping and the error
 envelope translation all run for real — the parts a fake gateway cannot exercise.
 """
 
+import json
+import logging
+from decimal import Decimal
+
 import httpx
 import pytest
 from pydantic import SecretStr
 
+from src.app.contracts.lead import Lead
 from src.app.core.request_id import set_request_id
 from src.app.core.settings.ops_core import OpsCoreSettings
+from src.app.exceptions.lead import LeadNotSavedError
 from src.app.exceptions.pricing import (
     PricingError,
     PricingRateLimitedError,
@@ -105,3 +111,87 @@ async def test_an_unmapped_rejection_is_a_502_that_does_not_echo_ops_core() -> N
     assert caught.value.status_code == 502
     assert caught.value.error_code == "pricing_rejected"
     assert "API key" not in caught.value.detail
+
+
+_LEAD = Lead(
+    conversation_id="conv-7",
+    name="Dana Smith",
+    contact="+1 555 0100",
+    service="Deep Tissue Massage",
+    quantity=6,
+    total=Decimal("648.00"),
+)
+
+
+async def test_a_lead_is_posted_as_a_lead_customer_with_the_order_and_contact_in_the_notes() -> None:
+    sent: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(201, json={"id": "00000000-0000-0000-0000-000000000001"})
+
+    await _gateway(httpx.MockTransport(respond)).save_lead(_LEAD)
+
+    (request,) = sent
+    assert (request.method, request.url.path) == ("POST", "/api/v1/customers")
+    body = json.loads(request.content)
+    assert body["name"] == "Dana Smith"
+    assert body["status"] == "lead"
+    for fact in ("6 x Deep Tissue Massage", "648.00", "+1 555 0100", "conv-7"):
+        assert fact in body["notes"]
+    assert len(body["notes"]) <= 2_000
+
+
+async def test_a_lead_without_a_name_or_contact_still_gets_a_record() -> None:
+    sent: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(201, json={})
+
+    bare = Lead(conversation_id="conv-8", name=None, contact=None, service=None, quantity=None, total=None)
+    await _gateway(httpx.MockTransport(respond)).save_lead(bare)
+
+    body = json.loads(sent[0].content)
+    assert body["name"]  # ops-core-api rejects a blank one
+    assert "not given" in body["notes"]
+
+
+async def test_a_lead_save_is_retried_like_a_price_lookup() -> None:
+    answers = iter([httpx.Response(503), httpx.Response(201, json={})])
+    calls: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return next(answers)
+
+    await _gateway(httpx.MockTransport(respond)).save_lead(_LEAD)
+
+    assert len(calls) == _ATTEMPTS
+
+
+async def test_a_persistent_failure_is_a_typed_error_and_the_log_has_no_personal_data(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(503))
+
+    with caplog.at_level(logging.INFO), pytest.raises(LeadNotSavedError):
+        await _gateway(transport).save_lead(_LEAD)
+
+    logged = str([record.__dict__ for record in caplog.records])
+    assert "Dana" not in logged
+    assert "555" not in logged
+
+
+async def test_a_rejected_lead_is_not_retried_and_is_logged_by_code(caplog: pytest.LogCaptureFixture) -> None:
+    calls: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(401, json={"detail": "Missing or invalid API key.", "error_code": "invalid_api_key"})
+
+    with caplog.at_level(logging.ERROR), pytest.raises(LeadNotSavedError):
+        await _gateway(httpx.MockTransport(respond)).save_lead(_LEAD)
+
+    assert len(calls) == 1
+    assert "invalid_api_key" in str([record.__dict__ for record in caplog.records])

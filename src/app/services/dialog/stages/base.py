@@ -5,7 +5,7 @@ the prompt in a fixed order, ask the model, absorb what it extracted, then decid
 where the machine goes next. A concrete stage overrides only the parts that differ
 between steps of the funnel — its `directive()` (what to instruct the model) and
 its `route()` (when to advance) — and optionally the `prepare()`/`absorb()`/
-`data_spec()` hooks. It can never reshuffle the skeleton, which is what keeps the
+`commit()`/`data_spec()` hooks. It can never reshuffle the skeleton, which is what keeps the
 control flow identical and the orchestrator free of per-stage branching.
 
 None of the text itself is here. Persona, output contract, re-ask and every
@@ -124,6 +124,7 @@ class DialogueStage(ABC):
             if self.takes_order_changes:
                 self._absorb_order_change(conversation, decision)
             self.absorb(conversation, decision)
+            await self.commit(conversation)
             next_stage = self.route(conversation, decision)
             span.set_attribute("sales.next_stage", next_stage.value)
             return StageResult(reply=reply, current_stage=self.stage, next_stage=next_stage)
@@ -158,6 +159,13 @@ class DialogueStage(ABC):
 
     def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:  # noqa: B027 (deliberate optional hook)
         """Hook: persist slots the model extracted. No-op by default (see prepare)."""
+
+    async def commit(self, conversation: Conversation) -> None:  # noqa: B027 (deliberate optional hook)
+        """Hook: act on what absorb() just recorded, when that needs I/O. No-op by default.
+
+        Separate from absorb() because absorb() is synchronous and shared by every
+        stage; only the stage that hands something to another system needs to wait.
+        """
 
     @abstractmethod
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:
