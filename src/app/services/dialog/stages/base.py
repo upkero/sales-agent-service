@@ -5,8 +5,10 @@ the prompt in a fixed order, ask the model, absorb what it extracted, then decid
 where the machine goes next. A concrete stage overrides only the parts that differ
 between steps of the funnel — its `directive()` (what to instruct the model) and
 its `route()` (when to advance) — and optionally the `prepare()`/`absorb()`/
-`commit()`/`data_spec()` hooks. It can never reshuffle the skeleton, which is what keeps the
-control flow identical and the orchestrator free of per-stage branching.
+`commit()`/`ensure_stated()`/`data_spec()`/`hands_over()` hooks. It can never
+reshuffle the skeleton, which is what keeps the control flow identical and the
+orchestrator nearly free of per-stage branching (the one exception is named in
+`services/sales/service.py`).
 
 None of the text itself is here. Persona, output contract, re-ask and every
 per-stage directive are Markdown in `prompts/`; what a stage supplies is which

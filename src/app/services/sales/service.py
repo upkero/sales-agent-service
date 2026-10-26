@@ -3,8 +3,10 @@
 Notice what is *not* here — there is no `if stage == GREETING … elif …` ladder.
 The current stage is looked up in a registry and asked to `handle()` itself; the
 stage decides what to say and where to go. Adding a stage is a new class plus one
-registry entry, and this file never changes. The one thing the orchestrator owns
-is the guard rail: it refuses any transition a stage was not allowed to make.
+registry entry, and this file does not change. The one exception is the re-pricing
+below: a changed order that no quote prices is sent back through PRESENT in the same
+turn, and that check names the stage. The other thing the orchestrator owns is the
+guard rail: it refuses any transition a stage was not allowed to make.
 """
 
 import asyncio
