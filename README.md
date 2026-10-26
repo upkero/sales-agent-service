@@ -132,7 +132,7 @@ curl -s localhost:8002/api/v1/turn \
 ```json
 {
   "conversation_id": "0b0f…",
-  "reply": "Hi, I'm Alex from Aurora Wellness! I'd love to help — what are you after?",
+  "reply": "Hi, I'm Alex from Aurora Wellness! I'd love to help. What are you after?",
   "stage": "qualify",
   "done": false,
   "handoff": false
