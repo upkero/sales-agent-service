@@ -1,9 +1,9 @@
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from openai import OpenAIError
 
-from src.app.llm import openai_compatible_llm_client as module
 from src.app.llm.openai_compatible_llm_client import OpenAICompatibleLLMClient
 
 
@@ -12,14 +12,14 @@ class _Clock:
 
 
 @pytest.fixture
-def clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
+def clock(monkeypatch: pytest.MonkeyPatch) -> type[_Clock]:
     _Clock.now = 1000.0
-    monkeypatch.setattr(module.time, "monotonic", lambda: _Clock.now)
+    monkeypatch.setattr(time, "monotonic", lambda: _Clock.now)
     return _Clock
 
 
 def _client(sdk: MagicMock, ok_ttl: float = 30.0, failed_ttl: float = 5.0) -> OpenAICompatibleLLMClient:
-    settings = MagicMock(ping_ok_ttl_seconds=ok_ttl, ping_failed_ttl_seconds=failed_ttl)
+    settings = MagicMock(base_url=None, ping_ok_ttl_seconds=ok_ttl, ping_failed_ttl_seconds=failed_ttl)
     return OpenAICompatibleLLMClient(settings=settings, client=sdk)
 
 

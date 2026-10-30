@@ -4,7 +4,7 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class CoreApiSettings(BaseSettings):
+class OpsCoreSettings(BaseSettings):
     """Where the price list lives.
 
     Every /api/v1 endpoint of ops-core-api requires X-API-Key, so the key is
@@ -41,5 +41,5 @@ class CoreApiSettings(BaseSettings):
 
 
 @lru_cache(maxsize=1)
-def get_core_api_settings() -> CoreApiSettings:
-    return CoreApiSettings()
+def get_ops_core_settings() -> OpsCoreSettings:
+    return OpsCoreSettings()

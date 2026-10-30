@@ -37,11 +37,20 @@ stateDiagram-v2
     close --> [*]
 ```
 
-Each stage is a small class that overrides only two things: **what** to tell the
-model this turn (`directive`) and **when** to advance (`route`). The orchestrator
-never branches on the stage — it looks the current stage up in a registry, asks it
-to `handle()` itself, and takes the next stage from the result. Adding a stage is a
-new class plus one registry entry; the orchestrator does not change.
+Each stage is a small class. It must supply two things: **what** to tell the model
+this turn (`directive`) and **when** to advance (`route`). Everything else is an
+optional hook on the base class: `prepare`, `absorb`, `commit`, `ensure_stated`,
+`data_spec`, `hands_over`. Most stages override one or two of them. `UpsellStage`
+overrides seven (`prepare`, `directive`, `hands_over`, `ensure_stated`, `absorb`,
+`route` and the private `_absorb_order_change`), because it makes the offer, reads
+whether the answer takes it and records the accepted order.
+
+The orchestrator looks the current stage up in a registry, asks it to `handle()`
+itself, and takes the next stage from the result. It never branches on the stage,
+with one exception: when a changed order has no quote that prices it, it sends the
+turn back through `present` before replying (`services/sales/service.py`). Adding
+a stage is a new class plus one registry entry; the orchestrator does not change,
+unless the new stage has to take part in that re-pricing.
 
 The only non-linear edge is `present → upsell`: when the customer raises no
 objection, the machine skips objection handling. That is the single permitted
@@ -64,7 +73,7 @@ api/  →  services/  →  interfaces/  ←  gateways/ · repositories/ · llm/
 - **`services/`** — the dialogue itself: the stage machine and the orchestrator.
 - **`interfaces/`** — the ports (ABCs) the services depend on.
 - **`gateways/`** vs **`repositories/`** — a gateway is somebody else's service
-  over the network (`gateways/core_api_pricing.py`); a repository is a store this
+  over the network (`gateways/ops_core.py`); a repository is a store this
   service owns (`repositories/memory_conversation.py`, in memory today, a Postgres
   table the day a conversation has to survive a restart). Both directories exist
   here on purpose — that is the rule working, not an oversight.
@@ -78,11 +87,11 @@ Patterns you can point at (each is commented in the code as a teaching example):
 
 | Pattern | Where | Why |
 |---|---|---|
-| **Template Method** | `services/dialog/stages/base.py` | Fixed turn skeleton; stages override only their directive and transition |
-| **Adapter** | `gateways/core_api_pricing.py` | An HTTP client that satisfies a port shaped like a plain data repository |
+| **Template Method** | `services/dialog/stages/base.py` | Fixed turn skeleton; a stage supplies its directive and transition, and overrides optional hooks as needed |
+| **Adapter** | `gateways/ops_core.py` | An HTTP client that satisfies a port shaped like a plain data repository |
 | **Repository** | `interfaces/conversation_repository.py` + `repositories/memory_conversation.py` | Conversation storage behind an abstraction, swappable for a DB later |
 | **Strategy** | `services/sales/tactics.py` | Interchangeable rule for *what* to upsell |
-| **Factory** | `llm/factory.py`, `gateways/core_api_pricing.py` | The one place each external client is constructed |
+| **Factory** | `llm/factory.py`, `gateways/ops_core.py` | The one place each external client is constructed |
 | **Dependency Inversion** | everywhere in `services/` | Services depend on `interfaces/` (ABCs), not concrete classes |
 
 ## Quickstart
@@ -90,7 +99,7 @@ Patterns you can point at (each is commented in the code as a teaching example):
 ### Run with Docker
 
 You need a running [`ops-core-api`](https://github.com/upkero/ops-core-api) (the
-price list) and an LLM endpoint (a local [Ollama](https://ollama.com) is the
+price list, and where closed leads are saved) and an LLM endpoint (a local [Ollama](https://ollama.com) is the
 zero-cost default).
 
 ```bash
@@ -132,7 +141,7 @@ curl -s localhost:8002/api/v1/turn \
 ```json
 {
   "conversation_id": "0b0f…",
-  "reply": "Hi, I'm Alex from Aurora Wellness! I'd love to help — what are you after?",
+  "reply": "Hi, I'm Alex from Aurora Wellness! I'd love to help. What are you after?",
   "stage": "qualify",
   "done": false,
   "handoff": false
@@ -150,9 +159,20 @@ Keep going and, at the `present`/`upsell` stages, the reply carries a real total
 computed by `ops-core-api` (e.g. six sessions at a 10% volume discount). The
 `stage` field is what a frontend uses to light up a progress bar. Once the customer
 has answered the upsell, the agent asks once for a name and a phone or email and
-moves to `close`; their next message gets a single confirmation of the order and
-its total, and `done` turns true. `handoff` turns true if the agent escalates to a
-human (see below).
+moves to `close`; their next message gets a single reply saying the request is in,
+with its total, and that the front desk will contact them to pick a time, and `done`
+turns true. Nothing is booked or paid in the conversation, and the reply never says
+so. `handoff` turns true if the agent escalates to a human (see below).
+
+### Where the lead goes
+
+On that closing turn the service creates a customer with status `lead` in
+`ops-core-api` (`POST /api/v1/customers`), through the same gateway and retry policy
+as a price lookup. The name is the customer's name; ops-core-api's customer has no
+contact field, so the note carries the service, quantity, quoted total, the contact
+the customer gave and the conversation id. If `ops-core-api` is down the conversation
+still closes: the failure is logged with its error code and the order, never the
+name or contact, and the lead is not retried on a later turn.
 
 ## Tests
 
@@ -177,11 +197,16 @@ A few decisions worth calling out, because they are where "production-grade" sho
 up:
 
 - **The paid endpoint is protected.** Every turn drives an LLM call, so
-  `POST /api/v1/turn` is **rate-limited per client IP** (429 + `Retry-After`
-  when exceeded) and requires an **inbound API key**: `SECURITY_API_KEY`, sent as
-  `X-API-Key` and checked in constant time. It is required, so a missing or
-  renamed variable stops the boot instead of leaving a paid endpoint open. Health
-  probes need no key and are never rate-limited.
+  `POST /api/v1/turn` is **rate-limited** (429 + `Retry-After` when exceeded) and
+  requires an **inbound API key**: `SECURITY_API_KEY`, sent as `X-API-Key` and
+  checked in constant time. It is required, so a missing or renamed variable stops
+  the boot instead of leaving a paid endpoint open. Health probes need no key and
+  are never rate-limited.
+
+  The limit counts per client address. Behind the live demo's bridge every request
+  arrives from the one bridge container, so there it is a **single global cap** shared
+  by all visitors (`TURN_RATE_LIMIT_PER_MINUTE`). Per-visitor caps live in the bridge,
+  not here. Called directly, it is per client.
 - **CORS is closed until you open it.** `CORS_ALLOWED_ORIGINS` defaults to *empty*,
   not `*`. The `curl` examples above work regardless, but **a browser frontend
   cannot call this service until its origin is listed** — set it in `.env` (CSV,

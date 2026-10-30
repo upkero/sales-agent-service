@@ -18,7 +18,7 @@ from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from src.app.contracts.llm.llm_message import LLMMessage
 from src.app.contracts.llm.llm_response import LLMResponse
-from src.app.core.metrics import record_llm_call
+from src.app.core.metrics import record_llm_call, record_llm_cost
 from src.app.core.turn_context import current_turn_stats
 from src.app.interfaces.llm.llm_client import LLMClient
 
@@ -75,6 +75,9 @@ async def traced_complete(llm: LLMClient, messages: Sequence[LLMMessage], *, pur
         if output_tokens is not None:
             span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
             stats.output_tokens += output_tokens
+        if response.cost is not None:
+            span.set_attribute("llm.cost", response.cost)
+            record_llm_cost(provider=provider, model=model, cost=response.cost)
         record_llm_call(
             provider=provider,
             model=model,

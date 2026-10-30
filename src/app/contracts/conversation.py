@@ -66,11 +66,14 @@ class Conversation:
     # confirms and what the front desk would act on.
     accepted_offer: Literal["base", "upsell"] | None = None
 
-    # CLOSE: who to confirm the booking with, as the prospect gave it, and whether
-    # the order has been confirmed — the conversation is done from then on.
+    # CLOSE: who the front desk should contact, as the prospect gave it, and whether
+    # the request has been taken — the conversation is done from then on.
     customer_name: str | None = None
     customer_contact: str | None = None
     closed: bool = False
+    # Whether the lead has been handed to ops-core-api. Set when the attempt is made,
+    # not when it succeeds: a failed hand-off is logged, never retried on a later turn.
+    lead_sent: bool = False
 
     # Whether the conversation was handed to a person. Kept so that counting how a
     # conversation ended counts it once, and so a handed-off one that is later

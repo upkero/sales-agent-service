@@ -9,8 +9,8 @@ from src.app.schemas.sales import TurnRequest, TurnResponse
 router = APIRouter(tags=["sales-agent"])
 
 
-# require_api_key gates the route when a key is configured (a no-op otherwise);
-# the per-IP rate limit is enforced ahead of it, in middleware.
+# require_api_key gates the route: SECURITY_API_KEY is required, so every call must carry
+# it. The rate limit is enforced ahead of it, in middleware.
 @router.post("/turn", response_model=TurnResponse, dependencies=[Depends(require_api_key)])
 async def take_turn(body: TurnRequest, service: SalesServiceDep) -> TurnResponse:
     """Advance the conversation by one turn.

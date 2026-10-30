@@ -10,7 +10,7 @@ wrong" because a code was renamed upstream and this map quietly stopped matching
 import json
 from pathlib import Path
 
-from src.app.gateways.core_api_pricing import _ERROR_CODES
+from src.app.gateways.ops_core import _ERROR_CODES
 
 _FIXTURE = Path(__file__).parents[1] / "fixtures" / "error-codes.json"
 

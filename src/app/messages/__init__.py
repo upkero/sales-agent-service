@@ -14,7 +14,7 @@ come from the model by definition.
 
 _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
-        "clarifier": "Sorry, I didn't quite catch that — could you say it once more?",
+        "clarifier": "Sorry, I didn't quite catch that. Could you say it once more?",
         "handoff": "Let me take your details and have a specialist follow up with you directly.",
         "price_pending": "I'll check the exact price as soon as I know the service and how many sessions you'd like.",
         "quote_total": "For {quantity} × {service} the total is {total}.",

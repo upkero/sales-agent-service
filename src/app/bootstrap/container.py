@@ -17,10 +17,11 @@ from src.app.contracts.sales import SalesStage
 from src.app.core.metrics import record_outcome
 from src.app.core.settings.agent import get_agent_settings
 from src.app.core.settings.conversation import get_conversation_store_settings
-from src.app.core.settings.core_api import get_core_api_settings
 from src.app.core.settings.llm import get_llm_settings
-from src.app.gateways.core_api_pricing import create_pricing_gateway
+from src.app.core.settings.ops_core import get_ops_core_settings
+from src.app.gateways.ops_core import OpsCoreGateway, create_ops_core_gateway
 from src.app.interfaces.conversation_repository import ConversationRepository
+from src.app.interfaces.lead_gateway import LeadGateway
 from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.interfaces.pricing_gateway import PricingGateway
 from src.app.llm.factory import create_llm_client
@@ -48,8 +49,18 @@ class ApplicationContainer:
         return create_llm_client(get_llm_settings())
 
     @cached_property
+    def ops_core(self) -> OpsCoreGateway:
+        return create_ops_core_gateway(get_ops_core_settings())
+
+    # One upstream, two ports: the stages ask for the narrow one they need, and
+    # close() releases the shared client once.
+    @cached_property
     def pricing_gateway(self) -> PricingGateway:
-        return create_pricing_gateway(get_core_api_settings())
+        return self.ops_core
+
+    @cached_property
+    def lead_gateway(self) -> LeadGateway:
+        return self.ops_core
 
     @cached_property
     def conversation_repository(self) -> ConversationRepository:
@@ -80,7 +91,7 @@ class ApplicationContainer:
             SalesStage.PRESENT: PresentStage(llm, settings, pricing),
             SalesStage.OBJECTION_HANDLING: ObjectionHandlingStage(llm, settings),
             SalesStage.UPSELL: UpsellStage(llm, settings, pricing, self.sales_tactic),
-            SalesStage.CLOSE: CloseStage(llm, settings),
+            SalesStage.CLOSE: CloseStage(llm, settings, self.lead_gateway),
         }
 
     @cached_property

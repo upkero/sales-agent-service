@@ -9,3 +9,5 @@ class LLMResponse:
     finish_reason: str | None = None
     usage: Mapping[str, int] | None = None
     metadata: Mapping[str, object] | None = None
+    # USD, as the provider reports it. Only OpenRouter does, so None for everything else.
+    cost: float | None = None
