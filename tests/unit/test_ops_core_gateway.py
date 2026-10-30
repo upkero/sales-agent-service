@@ -23,6 +23,7 @@ from src.app.exceptions.pricing import (
     ServiceNotFoundError,
 )
 from src.app.gateways.ops_core import OpsCoreGateway, _inject_request_id
+from tests.fakes import logged_text
 
 _ATTEMPTS = 2
 
@@ -193,9 +194,9 @@ async def test_a_persistent_failure_is_a_typed_error_and_the_log_has_no_personal
     with caplog.at_level(logging.INFO), pytest.raises(LeadNotSavedError):
         await _gateway(transport).save_lead(_LEAD)
 
-    logged = str([record.__dict__ for record in caplog.records])
+    logged = logged_text(caplog.records)
     assert "Dana" not in logged
-    assert "555" not in logged
+    assert "555 0100" not in logged
 
 
 async def test_a_rejected_lead_is_not_retried_and_is_logged_by_code(caplog: pytest.LogCaptureFixture) -> None:

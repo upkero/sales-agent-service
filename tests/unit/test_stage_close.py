@@ -7,7 +7,7 @@ from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.services.dialog.stages.close import CloseStage
-from tests.fakes import FakeLeadGateway, StubLLM, UnavailableLeadGateway, compute_quote, control
+from tests.fakes import FakeLeadGateway, StubLLM, UnavailableLeadGateway, compute_quote, control, logged_text
 
 
 def _closing_conversation() -> Conversation:
@@ -111,9 +111,9 @@ async def test_when_ops_core_is_down_the_conversation_still_closes_and_the_log_h
     assert leads.attempts == 1
     failure = [record for record in caplog.records if record.getMessage() == "Lead not saved"]
     assert failure
-    logged = str([record.__dict__ for record in caplog.records])
+    logged = logged_text(caplog.records)
     assert "Dana" not in logged
-    assert "555" not in logged
+    assert "555 0100" not in logged
 
     conversation.add_user("anyone there?")
     await stage.handle(conversation)

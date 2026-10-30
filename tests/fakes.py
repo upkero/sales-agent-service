@@ -8,6 +8,7 @@ be asserted exactly.
 """
 
 import json
+import logging
 from collections.abc import Callable, Sequence
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -194,3 +195,13 @@ def build_container(llm: LLMClient, pricing: PricingGateway, leads: LeadGateway 
     container.__dict__["pricing_gateway"] = pricing
     container.__dict__["lead_gateway"] = leads or FakeLeadGateway()
     return container
+
+
+# Attributes every LogRecord carries (time, pid, thread...). Leaving them out of a PII
+# check matters: their digits can contain any short number, "555" included.
+_STANDARD_LOG_ATTRS = frozenset(vars(logging.makeLogRecord({})))
+
+
+def logged_text(records: Sequence[logging.LogRecord]) -> str:
+    """What a log line could leak: each message and the extras the code attached."""
+    return str([(r.getMessage(), {k: v for k, v in vars(r).items() if k not in _STANDARD_LOG_ATTRS}) for r in records])
