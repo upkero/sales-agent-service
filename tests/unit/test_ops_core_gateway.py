@@ -157,6 +157,21 @@ async def test_a_lead_without_a_name_or_contact_still_gets_a_record() -> None:
     assert "not given" in body["notes"]
 
 
+async def test_an_overlong_name_or_contact_is_cut_to_what_ops_core_accepts() -> None:
+    sent: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(201, json={})
+
+    long = Lead(conversation_id="conv-9", name="N" * 500, contact="c" * 5_000, service=None, quantity=None, total=None)
+    await _gateway(httpx.MockTransport(respond)).save_lead(long)
+
+    body = json.loads(sent[0].content)
+    assert len(body["name"]) == 200
+    assert len(body["notes"]) == 2_000
+
+
 async def test_a_lead_save_is_retried_like_a_price_lookup() -> None:
     answers = iter([httpx.Response(503), httpx.Response(201, json={})])
     calls: list[httpx.Request] = []

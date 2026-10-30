@@ -58,6 +58,10 @@ _DEFAULT_RETRY_AFTER = "5"
 # ops-core-api's notes field holds 2 000 characters; the order line is far shorter, and the
 # contact is cut to 120 characters by the stage that reads it.
 _UNNAMED_LEAD = "Unnamed lead"
+# ops-core-api's limits on a customer (CustomerCreateRequest). Name and contact are typed by
+# the customer, so a long one is cut here rather than turned into a 422 and a lost lead.
+_NAME_MAX = 200
+_NOTES_MAX = 2_000
 
 
 def _lead_notes(lead: Lead) -> str:
@@ -132,7 +136,8 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
         Retried like a price lookup. A retry after a response that was lost can leave
         two records of one lead: a duplicate to merge costs less than a lost call-back.
         """
-        body = {"name": lead.name or _UNNAMED_LEAD, "status": "lead", "notes": _lead_notes(lead)}
+        name = (lead.name or "").strip()[:_NAME_MAX] or _UNNAMED_LEAD
+        body = {"name": name, "status": "lead", "notes": _lead_notes(lead)[:_NOTES_MAX]}
         try:
             response = await self._retrying_customers("POST", "/api/v1/customers", json=body)
         except _TransientError as exc:
