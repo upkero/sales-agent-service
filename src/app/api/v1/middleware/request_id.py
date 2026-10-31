@@ -7,7 +7,7 @@ from opentelemetry import trace
 from src.app.core.request_id import generate_request_id, set_request_id
 
 _HEADER = "X-Request-ID"
-_SKIP_PATHS = frozenset({"/metrics", "/health/live", "/health/ready"})
+_SKIP_PATHS = frozenset({"/health/live", "/health/ready"})
 # The id is echoed back, forwarded upstream and written into every log line, so
 # only a plain token is taken from the caller; anything else gets a fresh one.
 _VALID_REQUEST_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
