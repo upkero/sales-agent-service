@@ -30,6 +30,21 @@ def test_does_not_let_a_brace_inside_a_string_end_the_scan() -> None:
     assert decision.reply == "use {curly} braces"
 
 
+def test_a_fence_after_prose_is_recovered() -> None:
+    decision = AgentDecision.parse('Here you go:\n```json\n{"reply": "hi", "data": {}}\n```')
+
+    assert decision is not None
+    assert decision.reply == "hi"
+
+
+def test_braces_inside_string_values_do_not_end_an_embedded_object_early() -> None:
+    decision = AgentDecision.parse('Sure! {"reply": "use } and { here", "data": {"a": {"b": "}"}}} trailing')
+
+    assert decision is not None
+    assert decision.reply == "use } and { here"
+    assert decision.data == {"a": {"b": "}"}}
+
+
 def test_garbage_is_a_parse_failure() -> None:
     assert AgentDecision.parse("I could not think of anything to say.") is None
 

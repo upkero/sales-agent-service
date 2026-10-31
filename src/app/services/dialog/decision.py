@@ -13,6 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+_DECODER = json.JSONDecoder()
+
 
 @dataclass(frozen=True, slots=True)
 class AgentDecision:
@@ -49,55 +51,16 @@ class AgentDecision:
 def extract_json_object(raw: str) -> dict[str, Any] | None:
     """Best-effort recovery of the JSON object from a model reply.
 
-    Tries three things in order of cleanliness: the whole string, the string with
-    a ```json fence stripped, then the first brace-balanced span. Quote-aware so a
-    brace inside a string value does not end the scan early.
+    `raw_decode` reads one object from the first brace and ignores what follows, so a
+    ```json fence, a lead-in sentence or trailing prose all fall away. It is string-aware,
+    so a brace inside a value does not end the object early. Only the first brace span is
+    tried: if it is not valid JSON, the reply is a parse failure.
     """
-    candidates = (raw.strip(), _strip_fence(raw), _first_balanced_object(raw))
-    for candidate in candidates:
-        if not candidate:
-            continue
-        try:
-            parsed = json.loads(candidate)
-        except (ValueError, TypeError):
-            continue
-        if isinstance(parsed, dict):
-            return parsed
-    return None
-
-
-def _strip_fence(raw: str) -> str:
-    text = raw.strip()
-    if not text.startswith("```"):
-        return ""
-    # Drop the opening fence line (``` or ```json) and any trailing fence.
-    without_open = text.split("\n", 1)[1] if "\n" in text else ""
-    return without_open.rsplit("```", 1)[0].strip()
-
-
-def _first_balanced_object(raw: str) -> str:
     start = raw.find("{")
     if start == -1:
-        return ""
-    depth = 0
-    in_string = False
-    escaped = False
-    for index in range(start, len(raw)):
-        char = raw[index]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return raw[start : index + 1]
-    return ""
+        return None
+    try:
+        obj, _ = _DECODER.raw_decode(raw, start)
+    except ValueError:
+        return None
+    return obj if isinstance(obj, dict) else None
