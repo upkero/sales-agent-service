@@ -20,7 +20,7 @@ from weakref import WeakValueDictionary
 from opentelemetry import trace
 
 from src.app.contracts.conversation import Conversation, Language
-from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, TurnOutcome
+from src.app.contracts.sales import ALLOWED_TRANSITIONS, SalesStage, StageResult, TurnOutcome
 from src.app.core.metrics import TransitionPath, record_illegal_transition, record_outcome, record_transition
 from src.app.core.turn_context import TurnStats, set_conversation_id, start_turn_stats
 from src.app.exceptions.dialog import InvalidStageTransitionError
@@ -80,7 +80,23 @@ class SalesService:
             conversation.language = language
         conversation.add_user(message)
 
-        current_stage = stage_start = conversation.stage
+        stage_start = conversation.stage
+        result = await self._run_stages(conversation)
+        self._record_ending(conversation, result, was_closed)
+        await self._conversations.save(conversation)
+
+        self._report_turn(conversation, stage_start, started, stats, result.handoff)
+        return TurnOutcome(
+            conversation_id=conversation.id,
+            reply=result.reply,
+            stage=result.next_stage,
+            handoff=result.handoff,
+            done=conversation.closed,
+        )
+
+    async def _run_stages(self, conversation: Conversation) -> StageResult:
+        """Run the current stage, then the re-pricing and hand-over steps; the reply that is left is the turn's."""
+        current_stage = conversation.stage
         order_before = (conversation.service, conversation.quantity)
         result = await self._stages[current_stage].handle(conversation)
 
@@ -112,7 +128,11 @@ class SalesService:
             result = await self._stages[current_stage].handle(conversation)
 
         self._guard_transition(conversation, current_stage, result.next_stage, "final")
+        return result
 
+    @staticmethod
+    def _record_ending(conversation: Conversation, result: StageResult, was_closed: bool) -> None:
+        """Put the reply and the stage it leads to on the conversation, and count how the conversation ended."""
         conversation.add_agent(result.reply)
         conversation.stage = result.next_stage
         # How a conversation ends, counted on the turn it happens and never again.
@@ -124,16 +144,6 @@ class SalesService:
         if result.handoff and not conversation.handed_off:
             conversation.handed_off = True
             record_outcome("handoff", conversation)
-        await self._conversations.save(conversation)
-
-        self._report_turn(conversation, stage_start, started, stats, result.handoff)
-        return TurnOutcome(
-            conversation_id=conversation.id,
-            reply=result.reply,
-            stage=result.next_stage,
-            handoff=result.handoff,
-            done=conversation.closed,
-        )
 
     async def _load_or_start(self, conversation_id: str | None, first_message: str) -> Conversation:
         if conversation_id:
