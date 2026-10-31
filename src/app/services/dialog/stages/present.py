@@ -33,7 +33,6 @@ class PresentStage(DialogueStage):
     stage: ClassVar[SalesStage] = SalesStage.PRESENT
     prompts: ClassVar[tuple[Prompt, ...]] = (_PRESENT, _UNKNOWN_SERVICE, _LISTED_SERVICES, *QUOTE_FACTS_PROMPTS)
     takes_order_changes: ClassVar[bool] = True
-    hands_over_on_advance: ClassVar[bool] = True
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings, pricing: PricingGateway) -> None:
         super().__init__(llm, settings)
@@ -76,6 +75,9 @@ class PresentStage(DialogueStage):
         if quote is None or conversation.price_presented or states_amount(reply, quote.total):
             return reply
         return f"{self._total_sentence(conversation, quote)} {reply}"
+
+    def hands_over(self, conversation: Conversation) -> bool:
+        return True
 
     def data_spec(self) -> str:
         return '"objection": boolean'

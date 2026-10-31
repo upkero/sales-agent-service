@@ -21,10 +21,12 @@ class ObjectionHandlingStage(DialogueStage):
     stage: ClassVar[SalesStage] = SalesStage.OBJECTION_HANDLING
     prompts: ClassVar[tuple[Prompt, ...]] = (_OBJECTION, *QUOTE_FACTS_PROMPTS)
     takes_order_changes: ClassVar[bool] = True
-    hands_over_on_advance: ClassVar[bool] = True
 
     def directive(self, conversation: Conversation) -> str:
         return _OBJECTION.render(quote_facts=self._describe_quote(conversation.quote))
+
+    def hands_over(self, conversation: Conversation) -> bool:
+        return True
 
     def data_spec(self) -> str:
         return '"resolved": boolean'

@@ -77,25 +77,19 @@ class DialogueStage(ABC):
     #: prompt then asks for the change in `data`, and the base absorbs it.
     takes_order_changes: ClassVar[bool] = False
 
-    #: Whether the turn on which this stage advances is handed, in full, to the
-    #: stage it advanced to. Set by the stages whose advancing turn is spent
-    #: reading the prospect's reaction ("sounds good", "okay, that helps"): they
-    #: have nothing left to say, and a reply from them would be a dead end that
-    #: pushes the next stage's opening line onto the prospect's following
-    #: message — typically their contact details, then misread as an answer.
-    hands_over_on_advance: ClassVar[bool] = False
-
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings) -> None:
         self._llm = llm
         self._settings = settings
 
     def hands_over(self, conversation: Conversation) -> bool:
-        """Whether the turn on which this stage just advanced goes on to the next stage.
+        """Whether the turn on which this stage just advanced is handed, in full, to the next stage.
 
-        `hands_over_on_advance` for most stages; a stage overrides this when it
-        depends on what the prospect said (see UpsellStage).
+        A stage says yes when its advancing turn is spent reading the prospect's reaction
+        ("sounds good", "okay, that helps"): it has nothing left to say, and a reply from it
+        would be a dead end that pushes the next stage's opening line onto the prospect's
+        following message, typically their contact details, then misread as an answer.
         """
-        return self.hands_over_on_advance
+        return False
 
     # ------------------------------------------------------------------ #
     # Template Method: the fixed skeleton. Do not override.
@@ -129,7 +123,7 @@ class DialogueStage(ABC):
             if reply != quoted:
                 record_guardrail("total_injected", self.stage.value)
             if self.takes_order_changes:
-                self._absorb_order_change(conversation, decision)
+                self.absorb_order_change(conversation, decision)
             await self.absorb(conversation, decision)
             next_stage = self.route(conversation, decision)
             span.set_attribute("sales.next_stage", next_stage.value)
@@ -284,7 +278,7 @@ class DialogueStage(ABC):
             quantity=quote.quantity, service=quote.service_name, total=quote.total
         )
 
-    def _absorb_order_change(self, conversation: Conversation, decision: AgentDecision) -> None:
+    def absorb_order_change(self, conversation: Conversation, decision: AgentDecision) -> None:
         """Take a service or quantity the prospect changed after hearing a price.
 
         A changed slot no quote prices makes `conversation.quote_is_stale` true,

@@ -129,13 +129,13 @@ class UpsellStage(DialogueStage):
         verdict = extract_json_object(response.content) or {}
         return verdict.get("take") is True
 
-    def _absorb_order_change(self, conversation: Conversation, decision: AgentDecision) -> None:
+    def absorb_order_change(self, conversation: Conversation, decision: AgentDecision) -> None:
         # On the offer turn the prospect has not heard the offer yet (their message
         # was already read for changes by the stage that handed over), so a quantity
         # in "data" is the model echoing its own offer. Taken as their order, it
         # would turn whatever they say next — their contact details — into a yes.
         if conversation.upsell_offered:
-            super()._absorb_order_change(conversation, decision)
+            super().absorb_order_change(conversation, decision)
 
     async def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
         # Only the answer turn decides; on the offer turn nothing has been offered

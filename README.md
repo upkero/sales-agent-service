@@ -40,9 +40,9 @@ stateDiagram-v2
 Each stage is a small class. It must supply two things: **what** to tell the model
 this turn (`directive`) and **when** to advance (`route`). Everything else is an
 optional hook on the base class: `prepare`, `absorb`, `ensure_stated`,
-`data_spec`, `hands_over`. Most stages override one or two of them. `UpsellStage`
+`data_spec`, `hands_over`, `absorb_order_change`. Most stages override one or two of them. `UpsellStage`
 overrides seven (`prepare`, `directive`, `hands_over`, `ensure_stated`, `absorb`,
-`route` and the private `_absorb_order_change`), because it makes the offer, reads
+`route` and `absorb_order_change`), because it makes the offer, reads
 whether the answer takes it and records the accepted order.
 
 The orchestrator looks the current stage up in a registry, asks it to `handle()`
