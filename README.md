@@ -39,7 +39,7 @@ stateDiagram-v2
 
 Each stage is a small class. It must supply two things: **what** to tell the model
 this turn (`directive`) and **when** to advance (`route`). Everything else is an
-optional hook on the base class: `prepare`, `absorb`, `commit`, `ensure_stated`,
+optional hook on the base class: `prepare`, `absorb`, `ensure_stated`,
 `data_spec`, `hands_over`. Most stages override one or two of them. `UpsellStage`
 overrides seven (`prepare`, `directive`, `hands_over`, `ensure_stated`, `absorb`,
 `route` and the private `_absorb_order_change`), because it makes the offer, reads

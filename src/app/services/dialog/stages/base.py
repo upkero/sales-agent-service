@@ -5,7 +5,7 @@ the prompt in a fixed order, ask the model, absorb what it extracted, then decid
 where the machine goes next. A concrete stage overrides only the parts that differ
 between steps of the funnel — its `directive()` (what to instruct the model) and
 its `route()` (when to advance) — and optionally the `prepare()`/`absorb()`/
-`commit()`/`ensure_stated()`/`data_spec()`/`hands_over()` hooks. It can never
+`ensure_stated()`/`data_spec()`/`hands_over()` hooks. It can never
 reshuffle the skeleton, which is what keeps the control flow identical and the
 orchestrator nearly free of per-stage branching (the one exception is named in
 `services/sales/service.py`).
@@ -130,8 +130,7 @@ class DialogueStage(ABC):
                 record_guardrail("total_injected", self.stage.value)
             if self.takes_order_changes:
                 self._absorb_order_change(conversation, decision)
-            self.absorb(conversation, decision)
-            await self.commit(conversation)
+            await self.absorb(conversation, decision)
             next_stage = self.route(conversation, decision)
             span.set_attribute("sales.next_stage", next_stage.value)
             return StageResult(reply=reply, next_stage=next_stage)
@@ -164,15 +163,8 @@ class DialogueStage(ABC):
         """
         return reply
 
-    def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:  # noqa: B027 (deliberate optional hook)
-        """Hook: persist slots the model extracted. No-op by default (see prepare)."""
-
-    async def commit(self, conversation: Conversation) -> None:  # noqa: B027 (deliberate optional hook)
-        """Hook: act on what absorb() just recorded, when that needs I/O. No-op by default.
-
-        Separate from absorb() because absorb() is synchronous and shared by every
-        stage; only the stage that hands something to another system needs to wait.
-        """
+    async def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:  # noqa: B027 (deliberate optional hook)
+        """Hook: persist what the model extracted, doing any I/O it needs. No-op by default (see prepare)."""
 
     @abstractmethod
     def route(self, conversation: Conversation, decision: AgentDecision) -> SalesStage:

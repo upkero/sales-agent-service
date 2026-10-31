@@ -63,7 +63,14 @@ class CloseStage(DialogueStage):
         # does not see the conversation, and an unused field costs nothing.
         return '"name": string|null, "contact": string|null'
 
-    def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
+    async def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
+        """Take the request, once, and hand the lead to ops-core-api.
+
+        Once closed, later turns return here at the top, which is what sends the lead exactly once.
+        The conversation closes whether or not the save works: the customer has already been told
+        their request is in, and a failed save is an alert for the operator, not a reason to leave
+        them hanging.
+        """
         if conversation.closed:
             return
         conversation.customer_name = _detail(decision.data.get("name"))
@@ -71,7 +78,7 @@ class CloseStage(DialogueStage):
         conversation.closed = True
         quote = conversation.quote
         # The name and contact stay out of the log: they are personal data, and ops-core-api
-        # receives them (see commit).
+        # receives them.
         logger.info(
             "Sale closed",
             extra={
@@ -84,17 +91,6 @@ class CloseStage(DialogueStage):
             },
         )
 
-    async def commit(self, conversation: Conversation) -> None:
-        """Hand the lead to ops-core-api, once.
-
-        The conversation closes whether or not this works: the customer has already been
-        told their request is in, and a failed save is an alert for the operator, not a
-        reason to leave them hanging. Nothing personal goes in the log line.
-        """
-        if not conversation.closed or conversation.lead_sent:
-            return
-        conversation.lead_sent = True
-        quote = conversation.quote
         lead = Lead(
             conversation_id=conversation.id,
             name=conversation.customer_name,

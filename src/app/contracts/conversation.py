@@ -71,9 +71,6 @@ class Conversation:
     customer_name: str | None = None
     customer_contact: str | None = None
     closed: bool = False
-    # Whether the lead has been handed to ops-core-api. Set when the attempt is made,
-    # not when it succeeds: a failed hand-off is logged, never retried on a later turn.
-    lead_sent: bool = False
 
     # Whether the conversation was handed to a person. Kept so that counting how a
     # conversation ended counts it once, and so a handed-off one that is later

@@ -64,7 +64,7 @@ class QualifyStage(DialogueStage):
     def data_spec(self) -> str:
         return ORDER_FIELDS
 
-    def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
+    async def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
         service = decision.data.get("service")
         if isinstance(service, str) and service.strip():
             conversation.service = canonical_service(conversation.offered_services, service.strip())

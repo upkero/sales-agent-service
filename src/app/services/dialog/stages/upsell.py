@@ -137,7 +137,7 @@ class UpsellStage(DialogueStage):
         if conversation.upsell_offered:
             super()._absorb_order_change(conversation, decision)
 
-    def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
+    async def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
         # Only the answer turn decides; on the offer turn nothing has been offered
         # yet, and a changed order goes back to PRESENT undecided.
         if not conversation.upsell_offered or conversation.quote_is_stale:
