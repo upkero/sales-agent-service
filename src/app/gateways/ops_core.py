@@ -226,15 +226,12 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
         except httpx.TransportError as exc:
             raise _TransientError(f"{method} {path} failed to connect: {exc}") from exc
 
-        if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
-            # The one 4xx worth repeating: it says "not now", not "no". The
-            # response rides along so the retry policy can honour Retry-After
-            # instead of guessing with its own backoff curve.
-            raise _TransientError(f"{method} {path} was rate limited", response)
-        if response.status_code >= 500:
-            # Server-side and possibly momentary (503 while it restarts, say). A
-            # 4xx is not: repeating a rejected request just makes the prospect
-            # wait for the same answer.
+        if response.status_code >= 500 or response.status_code == httpx.codes.TOO_MANY_REQUESTS:
+            # Server-side and possibly momentary (503 while it restarts, say). 429
+            # joins them as the one 4xx that says "not now" rather than "no"; the
+            # response rides along so the retry policy can honour its Retry-After.
+            # Any other 4xx is a rejection, and repeating it just makes the
+            # prospect wait for the same answer.
             raise _TransientError(f"{method} {path} returned {response.status_code}", response)
         return response
 
