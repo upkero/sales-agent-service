@@ -32,6 +32,8 @@ async def traced_complete(llm: LLMClient, messages: Sequence[LLMMessage], *, pur
     stats.llm_calls += 1
     provider, model = llm.provider_name, llm.model_name
     started = time.perf_counter()
+    error_type: str | None = None
+    input_tokens = output_tokens = None
     with _tracer.start_as_current_span(
         f"chat {model}",
         kind=SpanKind.CLIENT,
@@ -46,45 +48,36 @@ async def traced_complete(llm: LLMClient, messages: Sequence[LLMMessage], *, pur
     ) as span:
         try:
             response = await llm.complete(messages, json_mode=True)
+            usage = response.usage or {}
+            input_tokens, output_tokens = usage.get("prompt_tokens"), usage.get("completion_tokens")
+            if response.model:
+                span.set_attribute("gen_ai.response.model", response.model)
+            if response.finish_reason:
+                span.set_attribute("gen_ai.response.finish_reasons", [response.finish_reason])
+            if (response_id := (response.metadata or {}).get("id")) is not None:
+                span.set_attribute("gen_ai.response.id", str(response_id))
+            if input_tokens is not None:
+                span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
+                stats.input_tokens += input_tokens
+            if output_tokens is not None:
+                span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
+                stats.output_tokens += output_tokens
+            if response.cost is not None:
+                span.set_attribute("llm.cost", response.cost)
+                record_llm_cost(provider=provider, model=model, cost=response.cost)
+            return response
         except Exception as exc:
             error_type = type(exc).__name__
             span.set_attribute("error.type", error_type)
             span.set_status(Status(StatusCode.ERROR))
+            raise
+        finally:
             record_llm_call(
                 provider=provider,
                 model=model,
                 purpose=purpose,
                 seconds=time.perf_counter() - started,
                 error_type=error_type,
-                input_tokens=None,
-                output_tokens=None,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
-            raise
-
-        usage = response.usage or {}
-        input_tokens, output_tokens = usage.get("prompt_tokens"), usage.get("completion_tokens")
-        if response.model:
-            span.set_attribute("gen_ai.response.model", response.model)
-        if response.finish_reason:
-            span.set_attribute("gen_ai.response.finish_reasons", [response.finish_reason])
-        if (response_id := (response.metadata or {}).get("id")) is not None:
-            span.set_attribute("gen_ai.response.id", str(response_id))
-        if input_tokens is not None:
-            span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
-            stats.input_tokens += input_tokens
-        if output_tokens is not None:
-            span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
-            stats.output_tokens += output_tokens
-        if response.cost is not None:
-            span.set_attribute("llm.cost", response.cost)
-            record_llm_cost(provider=provider, model=model, cost=response.cost)
-        record_llm_call(
-            provider=provider,
-            model=model,
-            purpose=purpose,
-            seconds=time.perf_counter() - started,
-            error_type=None,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
-        return response
