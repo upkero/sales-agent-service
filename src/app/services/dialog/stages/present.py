@@ -21,12 +21,12 @@ class PresentStage(DialogueStage):
     """Fetch the live price from ops-core-api and put the offer in front of the
     prospect, then read their reaction.
 
-    This is the stage that actually talks to the pricing service (Adapter). It
+    This is the stage that actually talks to the pricing service. It
     spans two turns by design: present the number, then — once the prospect has
     reacted — branch. No objection means the sanctioned single skip straight to
     UPSELL, past objection handling.
 
-    A price that unavailable (503) is left to propagate as a typed error; a
+    A price that is unavailable (503) is left to propagate as a typed error; a
     service that simply is not in the catalogue (404) is recovered here, by
     offering the real catalogue and letting the prospect re-choose."""
 

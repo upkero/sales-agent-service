@@ -3,8 +3,8 @@
 ops-core-api answers every failure with a uniform {detail, error_code} envelope,
 and the adapter switches on `error_code` rather than the status code so the agent
 can react differently to "there is no such service" (ask the prospect to pick one
-that exists) than to "the price list is momentarily unreachable" (apologise and
-retry). Collapsing them into a status number would produce one useless apology.
+that exists) than to "the price list is momentarily unreachable" (a 503 the caller can retry).
+Collapsing them into a status number would hide that difference.
 """
 
 from src.app.exceptions.base import BaseAppException
@@ -20,8 +20,9 @@ class PricingError(BaseAppException):
 class PricingUnavailableError(PricingError):
     """The pricing API could not be reached, or kept failing.
 
-    Not the prospect's fault and nothing they can do, so the agent says the price
-    list is momentarily unavailable rather than reciting a status code.
+    Not the prospect's fault and nothing they can do. Nothing in the dialogue catches
+    it (QUALIFY aside, which carries on without the catalogue), so it ends the turn
+    as a 503 with a fixed message.
     """
 
     status_code = 503

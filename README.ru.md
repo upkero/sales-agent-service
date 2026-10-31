@@ -20,8 +20,8 @@
 Каждая стадия — небольшой класс. Обязательны две вещи: **что** сказать модели в
 этот ход (`directive`) и **когда** переходить дальше (`route`). Остальное — необязательные
 хуки базового класса: `prepare`, `absorb`, `ensure_stated`, `data_spec`,
-`hands_over`, `absorb_order_change`. Большинство стадий переопределяет один-два из них, а `UpsellStage` —
-семь (`prepare`, `directive`, `hands_over`, `ensure_stated`, `absorb`, `route` и
+`hands_over`, `absorb_order_change`. `GreetingStage` не переопределяет ни одного, `ObjectionHandlingStage` — два, остальные —
+от трёх до пяти. `UpsellStage` с пятью переопределяет семь методов в сумме (`prepare`, `directive`, `hands_over`, `ensure_stated`, `absorb`, `route` и
 `absorb_order_change`): она делает предложение, читает, принят ли ответ,
 и записывает выбранный заказ.
 

@@ -178,8 +178,7 @@ class DialogueStage(ABC):
     def _system_prompt(self, conversation: Conversation) -> str:
         # Fixed section order (persona -> task -> output contract): the persona and
         # the hard output rule bracket the free-form stage directive so a verbose
-        # directive cannot bury either. Mirrors the ordering discipline in the
-        # sibling voice-agent's dialog flow.
+        # directive cannot bury either.
         order_change = _ORDER_CHANGE.text if self.takes_order_changes else ""
         sections = (self._persona(conversation), self.directive(conversation), order_change, self._output_contract())
         return "\n\n".join(section.strip() for section in sections if section.strip())

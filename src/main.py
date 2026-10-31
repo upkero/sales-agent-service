@@ -58,16 +58,14 @@ def create_app() -> FastAPI:
     # 429, and that response must travel back out through CORS or the browser
     # gets it without CORS headers — an opaque "Failed to fetch" instead of a
     # readable status. It also means an OPTIONS preflight is answered by CORS
-    # before the limiter ever counts it, so a browser client no longer spends
-    # half its quota on requests that carry no message.
+    # before the limiter ever counts it, so preflights do not spend quota.
     register_rate_limiting(app)
     register_request_id_middleware(app)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
         # Explicit False: the API key travels in a header, never a cookie, so
-        # there are no credentials to allow. Deriving it from the origin list
-        # meant an empty list silently switched it on.
+        # there are no credentials to allow.
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],

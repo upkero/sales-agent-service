@@ -1,8 +1,7 @@
-"""Slot extraction shared by the stages that read `service`/`quantity` from the
-model's `data`.
+"""Reading `service` and `quantity` out of the model's `data` and the prospect's words.
 
-QUALIFY fills these slots and PRESENT corrects them when the first guess did not
-price, so the coercion rules live here once rather than being copied into both.
+QUALIFY fills these slots, the base stage corrects them after a price was stated, and
+UPSELL reads the answer to its offer, so the coercion rules live here once.
 """
 
 import re

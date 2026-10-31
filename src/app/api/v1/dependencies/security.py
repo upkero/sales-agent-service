@@ -1,9 +1,9 @@
 """Inbound API-key auth for the turn endpoint.
 
 Required, like on every service of the portfolio: the key is SECURITY_API_KEY and
-every turn must carry it in the X-API-Key header. An optional key once meant a
-renamed or forgotten variable left a paid endpoint silently open; a required one
-fails the boot instead.
+every turn must carry it in the X-API-Key header. A required key fails the boot
+when the variable is renamed or forgotten; an optional one would leave a paid
+endpoint silently open.
 """
 
 import secrets
