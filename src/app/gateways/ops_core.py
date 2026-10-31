@@ -74,11 +74,16 @@ def _lead_notes(lead: Lead) -> str:
     )
 
 
-def _error_code(response: httpx.Response) -> str:
+def _error_envelope(response: httpx.Response) -> tuple[str, str]:
+    """(error_code, detail) from ops-core-api's {detail, error_code} envelope.
+
+    Empty code and the start of the raw body when the response is not that envelope.
+    """
     try:
-        return str(response.json().get("error_code", ""))
+        body = response.json()
+        return str(body.get("error_code", "")), str(body.get("detail", ""))
     except (ValueError, AttributeError):
-        return ""
+        return "", response.text[:200]
 
 
 class _TransientError(Exception):
@@ -143,19 +148,14 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
         except _TransientError as exc:
             # The exception text names the method, path and status; the body, which holds
             # the customer's details, never reaches a log.
-            logger.warning(
-                "ops-core-api customer create unreachable after %d attempts: %s",
-                self._settings.max_attempts,
-                exc,
-                extra={"attempts": self._settings.max_attempts},
-            )
+            self._log_unreachable("customer create", exc)
             raise LeadNotSavedError() from exc
         if response.status_code >= 400:
             # A 4xx means the two services disagree about the contract: ours to fix, so loud.
             logger.error(
                 "ops-core-api refused the customer record: %s",
                 response.status_code,
-                extra={"status_code": response.status_code, "error_code": _error_code(response)},
+                extra={"status_code": response.status_code, "error_code": _error_envelope(response)[0]},
             )
             raise LeadNotSavedError()
 
@@ -186,12 +186,7 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
         try:
             response = await self._retrying_pricing(method, path, params=params)
         except _TransientError as exc:
-            logger.warning(
-                "ops-core-api pricing unreachable after %d attempts: %s",
-                self._settings.max_attempts,
-                exc,
-                extra={"attempts": self._settings.max_attempts},
-            )
+            self._log_unreachable("pricing", exc)
             if exc.response is not None and exc.response.status_code == httpx.codes.TOO_MANY_REQUESTS:
                 # Still throttled after every attempt. Pass the upstream's own
                 # Retry-After along instead of reporting it as broken: "wait n
@@ -203,6 +198,15 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
             raise self._to_exception(response)
         result: dict[str, Any] = response.json()
         return result
+
+    def _log_unreachable(self, what: str, exc: _TransientError) -> None:
+        logger.warning(
+            "ops-core-api %s unreachable after %d attempts: %s",
+            what,
+            self._settings.max_attempts,
+            exc,
+            extra={"attempts": self._settings.max_attempts},
+        )
 
     async def _send_once(
         self,
@@ -234,13 +238,7 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
         return response
 
     def _to_exception(self, response: httpx.Response) -> PricingError:
-        try:
-            body = response.json()
-            error_code = str(body.get("error_code", ""))
-            detail = str(body.get("detail", ""))
-        except ValueError:
-            error_code, detail = "", response.text[:200]
-
+        error_code, detail = _error_envelope(response)
         exception_type = _ERROR_CODES.get(error_code)
         if exception_type is not None:
             return exception_type(detail or None)
