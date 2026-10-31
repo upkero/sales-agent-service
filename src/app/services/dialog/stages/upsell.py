@@ -15,7 +15,7 @@ from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision, extract_json_object
 from src.app.services.dialog.extraction import gives_contact, mentions_quantity
 from src.app.services.dialog.stages.base import QUOTE_FACTS_PROMPTS, DialogueStage
-from src.app.services.sales.tactics import SalesTactic
+from src.app.services.sales.tactics import next_volume_tier
 
 logger = getLogger(__name__)
 
@@ -30,8 +30,8 @@ _CHOICE_DECLINED = get_prompt("upsell_choice_declined")
 class UpsellStage(DialogueStage):
     """Offer the prospect a bigger commitment that unlocks a better price.
 
-    The stage decides *that* it upsells; the `SalesTactic` (Strategy) decides
-    *which* quantity — here, the next volume tier ops-core-api rewards. The offer
+    The stage decides *that* it upsells; `next_volume_tier` decides *which*
+    quantity — the next volume tier ops-core-api rewards. The offer
     price is a second, live pricing call, so the number the prospect hears is the
     real discounted total, not an estimate. Two turns: make the offer, then read
     the answer and ask for a name and a contact, after which CLOSE confirms."""
@@ -53,11 +53,9 @@ class UpsellStage(DialogueStage):
         llm: LLMClient,
         settings: SalesAgentSettings,
         pricing: PricingGateway,
-        tactic: SalesTactic,
     ) -> None:
         super().__init__(llm, settings)
         self._pricing = pricing
-        self._tactic = tactic
 
     async def prepare(self, conversation: Conversation) -> None:
         if conversation.upsell_offered:
@@ -70,7 +68,7 @@ class UpsellStage(DialogueStage):
             return
         if conversation.service is None or conversation.quantity is None:
             return
-        target = self._tactic.upsell_target(conversation.quantity)
+        target = next_volume_tier(conversation.quantity)
         if target is None:
             # Already at the top tier — nothing to upsell on volume. The directive
             # will pivot to affirming their choice instead.

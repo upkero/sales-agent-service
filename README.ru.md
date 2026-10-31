@@ -42,7 +42,7 @@
 недосмотр. Весь текст для модели — в `prompts/` (Markdown, английский, язык ответа
 через плейсхолдер `{reply_language}`); строки, которые клиент читает дословно, — в
 `messages/`. Применённые паттерны (каждый прокомментирован в коде как обучающий
-пример): Template Method, Adapter, Repository, Strategy, Factory, Dependency
+пример): Template Method, Adapter, Repository, Factory, Dependency
 Inversion.
 
 ### Запуск

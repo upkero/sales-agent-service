@@ -22,7 +22,6 @@ from src.app.services.dialog.stages.objection import ObjectionHandlingStage
 from src.app.services.dialog.stages.present import PresentStage
 from src.app.services.dialog.stages.qualify import QualifyStage
 from src.app.services.dialog.stages.upsell import UpsellStage
-from src.app.services.sales.tactics import VolumeDiscountTactic
 from tests.fakes import FakeLeadGateway, FakePricingGateway, StubLLM, compute_quote, control
 
 
@@ -34,7 +33,7 @@ def _stages(settings: SalesAgentSettings) -> list[DialogueStage]:
         QualifyStage(llm, settings, pricing),
         PresentStage(llm, settings, pricing),
         ObjectionHandlingStage(llm, settings),
-        UpsellStage(llm, settings, pricing, VolumeDiscountTactic()),
+        UpsellStage(llm, settings, pricing),
         CloseStage(llm, settings, FakeLeadGateway()),
     ]
 

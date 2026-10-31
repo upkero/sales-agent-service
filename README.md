@@ -90,7 +90,6 @@ Patterns you can point at (each is commented in the code as a teaching example):
 | **Template Method** | `services/dialog/stages/base.py` | Fixed turn skeleton; a stage supplies its directive and transition, and overrides optional hooks as needed |
 | **Adapter** | `gateways/ops_core.py` | An HTTP client that satisfies a port shaped like a plain data repository |
 | **Repository** | `interfaces/conversation_repository.py` + `repositories/memory_conversation.py` | Conversation storage behind an abstraction, swappable for a DB later |
-| **Strategy** | `services/sales/tactics.py` | Interchangeable rule for *what* to upsell |
 | **Factory** | `llm/factory.py`, `gateways/ops_core.py` | The one place each external client is constructed |
 | **Dependency Inversion** | everywhere in `services/` | Services depend on `interfaces/` (ABCs), not concrete classes |
 

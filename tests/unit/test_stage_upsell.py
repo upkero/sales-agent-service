@@ -1,10 +1,12 @@
 from decimal import Decimal
 
+import pytest
+
 from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
 from src.app.core.settings.agent import SalesAgentSettings
 from src.app.services.dialog.stages.upsell import UpsellStage
-from src.app.services.sales.tactics import VolumeDiscountTactic
+from src.app.services.sales.tactics import next_volume_tier
 from tests.fakes import FakePricingGateway, StubLLM, compute_quote, control, verdict
 
 
@@ -23,13 +25,12 @@ async def test_offers_the_next_tier_at_a_live_discounted_price(
         StubLLM(control("Book six and you'll save 10% — 648 instead of 720.", accept=True)),
         agent_settings,
         pricing,
-        VolumeDiscountTactic(),
     )
     conversation = _ready_conversation(quantity=3)
 
     result = await stage.handle(conversation)
 
-    # The upsell quantity (6) comes from the Strategy; the price is a real second
+    # The upsell quantity (6) comes from next_volume_tier; the price is a real second
     # call to the pricing gateway, not an estimate.
     assert ("quote", "Deep Tissue Massage", "6") in pricing.calls
     assert conversation.upsell_quote is not None
@@ -47,7 +48,7 @@ async def test_closes_after_the_prospect_responds_to_the_offer(
     conversation.upsell_quote = compute_quote("Deep Tissue Massage", Decimal("120.00"), 6)
     conversation.upsell_offered = True  # the offer was made last turn
     llm = StubLLM(control("Perfect, I'll set up six.", accept=True))
-    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
+    stage = UpsellStage(llm, agent_settings, pricing)
 
     result = await stage.handle(conversation)
 
@@ -67,7 +68,7 @@ async def test_an_accepted_upsell_becomes_the_order(
 ) -> None:
     conversation = _answering_conversation()
     llm = StubLLM([verdict(True), control("Six it is.")])
-    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
+    stage = UpsellStage(llm, agent_settings, pricing)
 
     await stage.handle(conversation)
 
@@ -88,7 +89,7 @@ async def test_contact_details_alone_keep_the_base_order(
     conversation = _answering_conversation()
     conversation.add_user("Dana, dana@example.com")
     llm = StubLLM([verdict(False), control("Thanks, Dana!", accept=True, quantity=6)])
-    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
+    stage = UpsellStage(llm, agent_settings, pricing)
 
     await stage.handle(conversation)
 
@@ -106,7 +107,7 @@ async def test_a_declined_upsell_keeps_the_base_offer(
     pricing: FakePricingGateway,
 ) -> None:
     conversation = _answering_conversation()
-    stage = UpsellStage(StubLLM(control("Three it is.", accept=False)), agent_settings, pricing, VolumeDiscountTactic())
+    stage = UpsellStage(StubLLM(control("Three it is.", accept=False)), agent_settings, pricing)
 
     await stage.handle(conversation)
 
@@ -122,7 +123,7 @@ async def test_the_offer_turn_records_no_answer(
     # The model echoing its own offer into "data" on the offer turn is not the
     # prospect's order; taken as one, their next message would accept it.
     llm = StubLLM(control("Six for 648.00?", accept=True, quantity=6))
-    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
+    stage = UpsellStage(llm, agent_settings, pricing)
     conversation = _ready_conversation(quantity=3)
 
     await stage.handle(conversation)
@@ -139,7 +140,6 @@ async def test_at_the_top_tier_there_is_nothing_to_upsell(
         StubLLM(control("You're already getting our best rate — shall we book it?")),
         agent_settings,
         pricing,
-        VolumeDiscountTactic(),
     )
     conversation = _ready_conversation(quantity=25)  # above the top discount tier
 
@@ -157,7 +157,7 @@ async def test_the_offer_turn_always_makes_the_offer(
     # As seen live after "no thanks": a polite "anything else?" with no offer in it,
     # and the next message read as the answer to an offer nobody had heard.
     stage = UpsellStage(
-        StubLLM(control("Glad to help! Anything else?")), agent_settings, pricing, VolumeDiscountTactic()
+        StubLLM(control("Glad to help! Anything else?")), agent_settings, pricing
     )
     conversation = _ready_conversation(quantity=3)
 
@@ -176,7 +176,7 @@ async def test_a_quantity_the_customer_never_said_is_not_an_order_change(
     conversation = _answering_conversation()
     conversation.add_user("No thanks.")
     llm = StubLLM([verdict(False), control("No problem!", quantity=1)])
-    stage = UpsellStage(llm, agent_settings, pricing, VolumeDiscountTactic())
+    stage = UpsellStage(llm, agent_settings, pricing)
 
     result = await stage.handle(conversation)
 
@@ -193,7 +193,6 @@ async def test_an_offer_already_named_gets_only_its_total(
         StubLLM(control("You could also take six sessions for a better rate. Interested?")),
         agent_settings,
         pricing,
-        VolumeDiscountTactic(),
     )
     conversation = _ready_conversation(quantity=3)
 
@@ -203,3 +202,8 @@ async def test_an_offer_already_named_gets_only_its_total(
         "You could also take six sessions for a better rate. Interested? "
         "That is 6 × Deep Tissue Massage for 648.00 in total."
     )
+
+
+@pytest.mark.parametrize(("quantity", "target"), [(1, 6), (5, 6), (6, 20), (19, 20), (20, None), (25, None)])
+def test_the_upsell_target_is_the_next_tier_above_the_quantity(quantity: int, target: int | None) -> None:
+    assert next_volume_tier(quantity) == target

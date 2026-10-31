@@ -3,7 +3,7 @@
 `cached_property` gives lazy singletons without a framework: nothing is built
 until something asks for it, and asking twice returns the same object. This is
 also the single place where the concrete implementations are chosen — the LLM
-client, the HTTP pricing adapter, the in-memory store, the selling tactic. Every
+client, the HTTP pricing adapter, the in-memory store. Every
 layer above depends on the ports; only this file names the classes, so swapping
 any one of them is a change here and nowhere else.
 """
@@ -34,7 +34,6 @@ from src.app.services.dialog.stages.present import PresentStage
 from src.app.services.dialog.stages.qualify import QualifyStage
 from src.app.services.dialog.stages.upsell import UpsellStage
 from src.app.services.sales.service import SalesService
-from src.app.services.sales.tactics import SalesTactic, VolumeDiscountTactic
 
 
 def _count_if_lost(conversation: Conversation) -> None:
@@ -72,12 +71,6 @@ class ApplicationContainer:
         )
 
     @cached_property
-    def sales_tactic(self) -> SalesTactic:
-        # The Strategy is chosen here and nowhere else. Swapping VolumeDiscountTactic
-        # for a premium cross-sell is this one line; UpsellStage never learns of it.
-        return VolumeDiscountTactic()
-
-    @cached_property
     def stages(self) -> Mapping[SalesStage, DialogueStage]:
         """The stage registry the orchestrator dispatches through. This mapping is
         the whole state machine's wiring — every concrete stage constructed with
@@ -90,7 +83,7 @@ class ApplicationContainer:
             SalesStage.QUALIFY: QualifyStage(llm, settings, pricing),
             SalesStage.PRESENT: PresentStage(llm, settings, pricing),
             SalesStage.OBJECTION_HANDLING: ObjectionHandlingStage(llm, settings),
-            SalesStage.UPSELL: UpsellStage(llm, settings, pricing, self.sales_tactic),
+            SalesStage.UPSELL: UpsellStage(llm, settings, pricing),
             SalesStage.CLOSE: CloseStage(llm, settings, self.lead_gateway),
         }
 
