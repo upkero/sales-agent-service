@@ -12,7 +12,10 @@ from src.app.core.turn_context import get_conversation_id
 
 _STDLIB_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {"message", "asctime"}
 
-_UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+# uvicorn.access is left exactly as uvicorn configured it. `--no-access-log` switches that logger
+# off by removing its handlers and stopping propagation; re-enabling propagation here undid the
+# flag, and the container log was 90% access lines.
+_UVICORN_LOGGERS = ("uvicorn", "uvicorn.error")
 
 
 class _JsonFormatter(logging.Formatter):
