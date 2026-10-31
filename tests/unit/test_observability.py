@@ -142,11 +142,7 @@ async def test_the_customers_words_never_reach_a_span(spans: None) -> None:
 
     await _walk(service)
 
-    values = [
-        str(value)
-        for span in telemetry.finished_spans()
-        for value in _attribute_values(span)
-    ]
+    values = [str(value) for span in telemetry.finished_spans() for value in _attribute_values(span)]
     assert values
     for secret in ("Dana", "dana@example.com", "six deep tissue", "front desk", "Twenty would be"):
         assert not any(secret in value for value in values), secret

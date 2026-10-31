@@ -10,9 +10,7 @@ from src.app.core.request_id import get_request_id
 from src.app.core.settings.logging import LoggingSettings
 from src.app.core.turn_context import get_conversation_id
 
-_STDLIB_ATTRS = frozenset(logging.LogRecord(
-    "", 0, "", 0, "", (), None
-).__dict__.keys()) | {"message", "asctime"}
+_STDLIB_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {"message", "asctime"}
 
 _UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
 
@@ -61,9 +59,7 @@ class _TextFormatter(logging.Formatter):
 
 
 def setup_logging(settings: LoggingSettings) -> None:
-    formatter: logging.Formatter = (
-        _JsonFormatter() if settings.format == "json" else _TextFormatter()
-    )
+    formatter: logging.Formatter = _JsonFormatter() if settings.format == "json" else _TextFormatter()
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     handler.addFilter(_RequestIdFilter())

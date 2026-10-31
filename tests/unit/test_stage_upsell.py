@@ -156,9 +156,7 @@ async def test_the_offer_turn_always_makes_the_offer(
 ) -> None:
     # As seen live after "no thanks": a polite "anything else?" with no offer in it,
     # and the next message read as the answer to an offer nobody had heard.
-    stage = UpsellStage(
-        StubLLM(control("Glad to help! Anything else?")), agent_settings, pricing
-    )
+    stage = UpsellStage(StubLLM(control("Glad to help! Anything else?")), agent_settings, pricing)
     conversation = _ready_conversation(quantity=3)
 
     result = await stage.handle(conversation)

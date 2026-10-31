@@ -28,9 +28,7 @@ _NUMBER = re.compile(r"(?<![\d.,])(\d{1,3}(?:[,\s  ]\d{3})+|\d+)(?:[.,](\d{1,
 _SMALLEST_WHOLE_AMOUNT = 100
 
 
-def unquoted_amounts(
-    reply: str, quotes: Iterable[PriceQuote | None], quantity: int | None = None
-) -> list[Decimal]:
+def unquoted_amounts(reply: str, quotes: Iterable[PriceQuote | None], quantity: int | None = None) -> list[Decimal]:
     """The amounts stated in `reply` that none of `quotes` contains.
 
     A discounted quote's subtotal counts as unquoted when its total is missing:

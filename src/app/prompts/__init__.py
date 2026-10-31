@@ -67,8 +67,7 @@ def _load() -> dict[str, Prompt]:
     a conversation with a guest on the line.
     """
     return {
-        path.stem: Prompt(path.stem, path.read_text(encoding="utf-8").strip())
-        for path in sorted(_DIR.glob("*.md"))
+        path.stem: Prompt(path.stem, path.read_text(encoding="utf-8").strip()) for path in sorted(_DIR.glob("*.md"))
     }
 
 

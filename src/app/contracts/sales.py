@@ -27,12 +27,8 @@ class SalesStage(StrEnum):
 ALLOWED_TRANSITIONS: dict[SalesStage, frozenset[SalesStage]] = {
     SalesStage.GREETING: frozenset({SalesStage.GREETING, SalesStage.QUALIFY}),
     SalesStage.QUALIFY: frozenset({SalesStage.QUALIFY, SalesStage.PRESENT}),
-    SalesStage.PRESENT: frozenset(
-        {SalesStage.PRESENT, SalesStage.OBJECTION_HANDLING, SalesStage.UPSELL}
-    ),
-    SalesStage.OBJECTION_HANDLING: frozenset(
-        {SalesStage.OBJECTION_HANDLING, SalesStage.UPSELL, SalesStage.PRESENT}
-    ),
+    SalesStage.PRESENT: frozenset({SalesStage.PRESENT, SalesStage.OBJECTION_HANDLING, SalesStage.UPSELL}),
+    SalesStage.OBJECTION_HANDLING: frozenset({SalesStage.OBJECTION_HANDLING, SalesStage.UPSELL, SalesStage.PRESENT}),
     SalesStage.UPSELL: frozenset({SalesStage.UPSELL, SalesStage.CLOSE, SalesStage.PRESENT}),
     SalesStage.CLOSE: frozenset({SalesStage.CLOSE}),
 }

@@ -14,6 +14,7 @@ from src.app.interfaces.llm.llm_client import LLMClient
 
 _USAGE_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
 
+
 class OpenAICompatibleLLMClient(LLMClient):
     """One client for every OpenAI-shaped provider (OpenAI, Ollama, others).
 

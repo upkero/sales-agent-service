@@ -30,6 +30,7 @@ TURN = "/api/v1/turn"
 # The key conftest configures; every turn must carry it.
 _AUTH = {"X-API-Key": os.environ["SECURITY_API_KEY"]}
 
+
 @asynccontextmanager
 async def _client(script: str | list[str], pricing: PricingGateway | None = None) -> AsyncIterator[AsyncClient]:
     app = create_app()
