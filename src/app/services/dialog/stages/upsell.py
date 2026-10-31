@@ -14,7 +14,7 @@ from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision, extract_json_object
 from src.app.services.dialog.extraction import gives_contact, mentions_quantity
-from src.app.services.dialog.stages.base import DialogueStage
+from src.app.services.dialog.stages.base import QUOTE_FACTS_PROMPTS, DialogueStage
 from src.app.services.sales.tactics import SalesTactic
 
 logger = getLogger(__name__)
@@ -23,6 +23,8 @@ _UPSELL = get_prompt("stage_upsell")
 _AFFIRM = get_prompt("stage_upsell_affirm")
 _ANSWER = get_prompt("stage_upsell_answer")
 _TAKE = get_prompt("upsell_take")
+_CHOICE_TAKEN = get_prompt("upsell_choice_taken")
+_CHOICE_DECLINED = get_prompt("upsell_choice_declined")
 
 
 class UpsellStage(DialogueStage):
@@ -35,7 +37,15 @@ class UpsellStage(DialogueStage):
     the answer and ask for a name and a contact, after which CLOSE confirms."""
 
     stage: ClassVar[SalesStage] = SalesStage.UPSELL
-    prompts: ClassVar[tuple[Prompt, ...]] = (_UPSELL, _AFFIRM, _ANSWER, _TAKE)
+    prompts: ClassVar[tuple[Prompt, ...]] = (
+        _UPSELL,
+        _AFFIRM,
+        _ANSWER,
+        _TAKE,
+        _CHOICE_TAKEN,
+        _CHOICE_DECLINED,
+        *QUOTE_FACTS_PROMPTS,
+    )
     takes_order_changes: ClassVar[bool] = True
 
     def __init__(
@@ -72,17 +82,17 @@ class UpsellStage(DialogueStage):
             # The answer turn: acknowledge the choice already read, and ask, once,
             # who to confirm it with.
             if conversation.upsell_taken and conversation.upsell_quote is not None:
-                choice = f"They took the larger package: {self._describe_quote(conversation.upsell_quote)}"
+                choice = _CHOICE_TAKEN.render(package_facts=self._describe_quote(conversation.upsell_quote))
             else:
                 # Neutral on purpose: "they keep their order" talked the model out of
                 # reporting "neither, make it 10" as the change it is.
-                choice = "They did not take the larger package."
+                choice = _CHOICE_DECLINED.text
             return _ANSWER.render(choice=choice)
         if conversation.upsell_quote is None:
             return _AFFIRM.text
         return _UPSELL.render(
             upsell_facts=self._describe_quote(conversation.upsell_quote),
-            current_facts=self._describe_quote(conversation.quote) if conversation.quote else "",
+            current_facts=self._describe_quote(conversation.quote),
         )
 
     def hands_over(self, conversation: Conversation) -> bool:
@@ -112,7 +122,7 @@ class UpsellStage(DialogueStage):
             return False  # top tier: there was nothing to take
         system = _TAKE.render(
             upsell_facts=self._describe_quote(offer),
-            quote_facts=self._describe_quote(conversation.quote) if conversation.quote else "",
+            quote_facts=self._describe_quote(conversation.quote),
         )
         # The offer and the reply go in as the chat turns they are, not into the
         # system role: the reply is the customer's own words.

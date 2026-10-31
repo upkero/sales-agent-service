@@ -11,7 +11,7 @@ from src.app.interfaces.llm.llm_client import LLMClient
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision
-from src.app.services.dialog.stages.base import DialogueStage
+from src.app.services.dialog.stages.base import QUOTE_FACTS_PROMPTS, DialogueStage
 
 logger = getLogger(__name__)
 
@@ -37,7 +37,7 @@ class CloseStage(DialogueStage):
     orchestrator) keeps the dispatch loop uniform."""
 
     stage: ClassVar[SalesStage] = SalesStage.CLOSE
-    prompts: ClassVar[tuple[Prompt, ...]] = (_CLOSE, _CLOSED)
+    prompts: ClassVar[tuple[Prompt, ...]] = (_CLOSE, _CLOSED, *QUOTE_FACTS_PROMPTS)
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings, leads: LeadGateway) -> None:
         super().__init__(llm, settings)
@@ -48,8 +48,7 @@ class CloseStage(DialogueStage):
             return _CLOSED.text
         # The accepted order (see UpsellStage), so the confirmation names the
         # package and its real total instead of reconstructing them from the chat.
-        order_facts = self._describe_quote(conversation.quote) if conversation.quote else ""
-        return _CLOSE.render(order_facts=order_facts)
+        return _CLOSE.render(order_facts=self._describe_quote(conversation.quote))
 
     def ensure_stated(self, conversation: Conversation, reply: str) -> str:
         # The reply names the order's total. Seen live: the model repeated its

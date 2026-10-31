@@ -10,10 +10,11 @@ from src.app.interfaces.pricing_gateway import PricingGateway
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.amounts import states_amount
 from src.app.services.dialog.decision import AgentDecision
-from src.app.services.dialog.stages.base import DialogueStage
+from src.app.services.dialog.stages.base import QUOTE_FACTS_PROMPTS, DialogueStage
 
 _PRESENT = get_prompt("stage_present")
 _UNKNOWN_SERVICE = get_prompt("stage_present_unknown_service")
+_LISTED_SERVICES = get_prompt("listed_services")
 
 
 class PresentStage(DialogueStage):
@@ -30,7 +31,7 @@ class PresentStage(DialogueStage):
     offering the real catalogue and letting the prospect re-choose."""
 
     stage: ClassVar[SalesStage] = SalesStage.PRESENT
-    prompts: ClassVar[tuple[Prompt, ...]] = (_PRESENT, _UNKNOWN_SERVICE)
+    prompts: ClassVar[tuple[Prompt, ...]] = (_PRESENT, _UNKNOWN_SERVICE, _LISTED_SERVICES, *QUOTE_FACTS_PROMPTS)
     takes_order_changes: ClassVar[bool] = True
     hands_over_on_advance: ClassVar[bool] = True
 
@@ -66,7 +67,7 @@ class PresentStage(DialogueStage):
             # model read them, and the system role is no place for those. The model
             # sees what they asked for in the history, as a user message.
             return _UNKNOWN_SERVICE.render(
-                catalogue=", ".join(conversation.offered_services) or "our listed services",
+                catalogue=", ".join(conversation.offered_services) or _LISTED_SERVICES.text,
             )
         return _PRESENT.render(quote_facts=self._describe_quote(conversation.quote))
 

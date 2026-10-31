@@ -4,7 +4,7 @@ from src.app.contracts.conversation import Conversation
 from src.app.contracts.sales import SalesStage
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
-from src.app.services.dialog.stages.base import DialogueStage
+from src.app.services.dialog.stages.base import QUOTE_FACTS_PROMPTS, DialogueStage
 
 _OBJECTION = get_prompt("stage_objection")
 
@@ -19,13 +19,12 @@ class ObjectionHandlingStage(DialogueStage):
     single reassuring sentence does not get mistaken for agreement."""
 
     stage: ClassVar[SalesStage] = SalesStage.OBJECTION_HANDLING
-    prompts: ClassVar[tuple[Prompt, ...]] = (_OBJECTION,)
+    prompts: ClassVar[tuple[Prompt, ...]] = (_OBJECTION, *QUOTE_FACTS_PROMPTS)
     takes_order_changes: ClassVar[bool] = True
     hands_over_on_advance: ClassVar[bool] = True
 
     def directive(self, conversation: Conversation) -> str:
-        quote_facts = self._describe_quote(conversation.quote) if conversation.quote else ""
-        return _OBJECTION.render(quote_facts=quote_facts)
+        return _OBJECTION.render(quote_facts=self._describe_quote(conversation.quote))
 
     def data_spec(self) -> str:
         return '"resolved": boolean'

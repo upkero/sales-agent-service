@@ -95,3 +95,17 @@ def test_a_customer_facing_line_exists_in_every_language_including_unknown(langu
     # Unknown languages fall back to English rather than producing a blank turn.
     assert get_message(language, "clarifier")
     assert get_message(language, "handoff")
+
+
+def test_a_quote_is_described_in_the_wording_of_its_discount() -> None:
+    discounted = compute_quote("Deep Tissue Massage", Decimal("120.00"), 6)
+    flat = compute_quote("Deep Tissue Massage", Decimal("120.00"), 3)
+
+    assert DialogueStage._describe_quote(discounted) == (
+        "6 x Deep Tissue Massage at 120.00 each is a 720.00 subtotal; a 10% volume discount takes off "
+        "72.00, for a total of 648.00."
+    )
+    assert DialogueStage._describe_quote(flat) == (
+        "3 x Deep Tissue Massage at 120.00 each, for a total of 360.00. No volume discount applies at this quantity."
+    )
+    assert DialogueStage._describe_quote(None) == ""

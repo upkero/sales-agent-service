@@ -1,0 +1,1 @@
+{quantity} x {service} at {unit_price} each, for a total of {total}. No volume discount applies at this quantity.

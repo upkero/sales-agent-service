@@ -16,6 +16,10 @@ from src.app.services.dialog.stages.base import DialogueStage
 logger = getLogger(__name__)
 
 _QUALIFY = get_prompt("stage_qualify")
+_CATALOGUE = get_prompt("qualify_catalogue")
+_KNOWN_SLOTS = get_prompt("qualify_known_slots")
+_KNOWN_SERVICE = get_prompt("qualify_known_service")
+_KNOWN_QUANTITY = get_prompt("qualify_known_quantity")
 _MAX_QUANTITY_ASKS = 2
 
 
@@ -29,7 +33,7 @@ class QualifyStage(DialogueStage):
     slots are genuinely filled — the model cannot talk the machine forward."""
 
     stage: ClassVar[SalesStage] = SalesStage.QUALIFY
-    prompts: ClassVar[tuple[Prompt, ...]] = (_QUALIFY,)
+    prompts: ClassVar[tuple[Prompt, ...]] = (_QUALIFY, _CATALOGUE, _KNOWN_SLOTS, _KNOWN_SERVICE, _KNOWN_QUANTITY)
 
     def __init__(self, llm: LLMClient, settings: SalesAgentSettings, pricing: PricingGateway) -> None:
         super().__init__(llm, settings)
@@ -49,8 +53,9 @@ class QualifyStage(DialogueStage):
         conversation.offered_services = tuple(item.service_name for item in catalogue)
 
     def directive(self, conversation: Conversation) -> str:
+        # The trailing space joins each fragment to the sentence after it in stage_qualify.md.
         catalogue = (
-            f"Our services are: {', '.join(conversation.offered_services)}. "
+            _CATALOGUE.render(services=", ".join(conversation.offered_services)) + " "
             if conversation.offered_services
             else ""
         )
@@ -85,7 +90,7 @@ class QualifyStage(DialogueStage):
         # Only a catalogue name: anything else is the customer's own wording, which
         # stays in the user role (the history) rather than the system prompt.
         if conversation.service in conversation.offered_services:
-            known.append(f"they want {conversation.service}")
+            known.append(_KNOWN_SERVICE.render(service=conversation.service))
         if conversation.quantity is not None:
-            known.append(f"quantity {conversation.quantity}")
-        return f"So far you know: {', '.join(known)}. " if known else ""
+            known.append(_KNOWN_QUANTITY.render(quantity=conversation.quantity))
+        return _KNOWN_SLOTS.render(known=", ".join(known)) + " " if known else ""

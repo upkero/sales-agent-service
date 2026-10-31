@@ -1,0 +1,1 @@
+{quantity} x {service} at {unit_price} each is a {subtotal} subtotal; a {discount_percent}% volume discount takes off {discount_amount}, for a total of {total}.

@@ -56,6 +56,11 @@ _PERSONA = get_prompt("persona")
 _OUTPUT_CONTRACT = get_prompt("output_contract")
 _STRICT_REASK = get_prompt("strict_reask")
 _ORDER_CHANGE = get_prompt("order_change")
+_QUOTE_DISCOUNTED = get_prompt("quote_facts_discounted")
+_QUOTE_FLAT = get_prompt("quote_facts_flat")
+
+#: The two wordings `_describe_quote` picks between, for the stages that use it to list in `prompts`.
+QUOTE_FACTS_PROMPTS = (_QUOTE_DISCOUNTED, _QUOTE_FLAT)
 
 
 class DialogueStage(ABC):
@@ -315,16 +320,18 @@ class DialogueStage(ABC):
             conversation.quantity = quantity
 
     @staticmethod
-    def _describe_quote(quote: PriceQuote) -> str:
+    def _describe_quote(quote: PriceQuote | None) -> str:
         """The quote as plain facts for the model to phrase — never shown raw to
-        the customer. Shared by the three stages that talk money."""
-        if quote.discount_percent > 0:
-            return (
-                f"{quote.quantity} x {quote.service_name} at {quote.unit_price} each is a "
-                f"{quote.subtotal} subtotal; a {quote.discount_percent}% volume discount takes off "
-                f"{quote.discount_amount}, for a total of {quote.total}."
-            )
-        return (
-            f"{quote.quantity} x {quote.service_name} at {quote.unit_price} each, "
-            f"for a total of {quote.total}. No volume discount applies at this quantity."
+        the customer. Empty when there is no quote. Shared by the stages that talk money."""
+        if quote is None:
+            return ""
+        prompt = _QUOTE_DISCOUNTED if quote.discount_percent > 0 else _QUOTE_FLAT
+        return prompt.render(
+            quantity=quote.quantity,
+            service=quote.service_name,
+            unit_price=quote.unit_price,
+            subtotal=quote.subtotal,
+            discount_percent=quote.discount_percent,
+            discount_amount=quote.discount_amount,
+            total=quote.total,
         )
