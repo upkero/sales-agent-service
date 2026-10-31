@@ -15,7 +15,7 @@ from collections.abc import Awaitable, Callable
 from logging import getLogger
 
 from fastapi import FastAPI, Request, Response
-from limits import parse
+from limits import RateLimitItem, parse
 from limits.storage import MemoryStorage
 from limits.strategies import FixedWindowRateLimiter
 
@@ -85,11 +85,11 @@ def register_rate_limiting(app: FastAPI) -> None:
         return response
 
 
-def _headers(limit: object, identifier: str) -> dict[str, str]:
-    stats = _limiter.get_window_stats(limit, identifier, _GUARDED_PATH)  # type: ignore[arg-type]
+def _headers(limit: RateLimitItem, identifier: str) -> dict[str, str]:
+    stats = _limiter.get_window_stats(limit, identifier, _GUARDED_PATH)
     return {
         "Retry-After": str(max(0, int(stats.reset_time - time.time()))),
-        "X-RateLimit-Limit": str(getattr(limit, "amount", "")),
+        "X-RateLimit-Limit": str(limit.amount),
         "X-RateLimit-Remaining": str(stats.remaining),
         "X-RateLimit-Reset": str(int(stats.reset_time)),
     }
