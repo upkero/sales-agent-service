@@ -134,7 +134,7 @@ async def test_after_agreeing_the_agent_asks_for_a_contact_once_then_closes() ->
             same_line,  # ...and UPSELL makes its offer in the same turn
             verdict(False),  # UPSELL reads the answer...
             same_line,  # ...and acknowledges it
-            same_line,  # CLOSE confirms
+            control("Thanks, your request is in.", name="Dana", contact="555-0100"),  # CLOSE confirms
             same_line,  # CLOSE, after the conversation is over
         ]
     )
@@ -153,7 +153,8 @@ async def test_after_agreeing_the_agent_asks_for_a_contact_once_then_closes() ->
         (SalesStage.CLOSE, True),
     ]
     system_prompts = [call[0].content for call in llm.calls]
-    assert sum("phone number or email" in prompt for prompt in system_prompts) == 1
+    # UPSELL's ask, and CLOSE's standing rule to ask once more if no contact came back.
+    assert sum("phone number or email" in prompt for prompt in system_prompts) == 2
     assert sum("Their request:" in prompt for prompt in system_prompts) == 1
     # Not an instruction on every turn any more, which is what made the line repeat.
     assert "front desk" not in get_prompt("persona").text

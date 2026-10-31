@@ -18,6 +18,14 @@ logger = getLogger(__name__)
 _CLOSE = get_prompt("stage_close")
 _CLOSED = get_prompt("stage_closed")
 
+# A "yes, go ahead" with no way to reach the customer: ask once more rather than
+# file a lead nobody can call back.
+_ASK_FOR_CONTACT = (
+    "If their message has no phone number or email, do not say the request is in: thank them "
+    "and ask once, briefly, for a phone number or email so the front desk can reach them, and "
+    'set "contact" to null.'
+)
+
 # Plenty for a name, a phone number or an email; anything longer is not one.
 _MAX_DETAIL_LENGTH = 120
 
@@ -48,7 +56,10 @@ class CloseStage(DialogueStage):
             return _CLOSED.text
         # The accepted order (see UpsellStage), so the confirmation names the
         # package and its real total instead of reconstructing them from the chat.
-        return _CLOSE.render(order_facts=self._describe_quote(conversation.quote))
+        return _CLOSE.render(
+            order_facts=self._describe_quote(conversation.quote),
+            contact_rule=_ASK_FOR_CONTACT if conversation.contact_asks == 0 else "",
+        )
 
     def ensure_stated(self, conversation: Conversation, reply: str) -> str:
         # The reply names the order's total. Seen live: the model repeated its
@@ -73,8 +84,15 @@ class CloseStage(DialogueStage):
         """
         if conversation.closed:
             return
-        conversation.customer_name = _detail(decision.data.get("name"))
-        conversation.customer_contact = _detail(decision.data.get("contact"))
+        name = _detail(decision.data.get("name")) or conversation.customer_name
+        contact = _detail(decision.data.get("contact"))
+        if contact is None and conversation.contact_asks == 0:
+            # The reply just asked for a phone or email (see the directive); wait for it.
+            conversation.customer_name = name
+            conversation.contact_asks += 1
+            return
+        conversation.customer_name = name
+        conversation.customer_contact = contact
         conversation.closed = True
         quote = conversation.quote
         # The name and contact stay out of the log: they are personal data, and ops-core-api

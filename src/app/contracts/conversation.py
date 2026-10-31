@@ -70,6 +70,8 @@ class Conversation:
     # the request has been taken — the conversation is done from then on.
     customer_name: str | None = None
     customer_contact: str | None = None
+    # CLOSE turns that got no phone or email. One more ask, then the request goes in anyway.
+    contact_asks: int = 0
     closed: bool = False
 
     # Whether the conversation was handed to a person. Kept so that counting how a

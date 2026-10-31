@@ -80,15 +80,44 @@ async def test_the_lead_goes_to_the_front_desk_once_with_the_accepted_order(
     assert (lead.service, lead.quantity, lead.total) == ("Deep Tissue Massage", 6, Decimal("648.00"))
 
 
-async def test_a_lead_without_details_is_still_handed_over(agent_settings: SalesAgentSettings) -> None:
+async def test_a_missing_contact_is_asked_for_once_before_the_lead_goes_in(
+    agent_settings: SalesAgentSettings,
+) -> None:
+    """Seen live: "yes, go ahead" with no contact closed the chat and filed a lead nobody could call."""
+    leads = FakeLeadGateway()
+    llm = StubLLM(
+        [
+            control("Thanks, Dana! What phone or email can the front desk use?", name="Dana", contact=None),
+            control("Thanks, your request is in.", name=None, contact="dana@example.com"),
+        ]
+    )
+    stage = CloseStage(llm, agent_settings, leads)
+    conversation = _closing_conversation()
+
+    await stage.handle(conversation)
+    assert not conversation.closed and not leads.leads
+    assert "phone number or email" in llm.calls[0][0].content
+
+    conversation.add_user("dana@example.com")
+    await stage.handle(conversation)
+    (lead,) = leads.leads
+    assert (lead.name, lead.contact) == ("Dana", "dana@example.com")
+    assert conversation.closed
+
+
+async def test_a_lead_without_details_is_still_handed_over_after_one_ask(agent_settings: SalesAgentSettings) -> None:
     leads = FakeLeadGateway()
     stage = CloseStage(StubLLM(control("Thanks.", name=None, contact=None)), agent_settings, leads)
+    conversation = _closing_conversation()
 
-    await stage.handle(_closing_conversation())
+    await stage.handle(conversation)
+    conversation.add_user("no, just book it")
+    await stage.handle(conversation)
 
     (lead,) = leads.leads
     assert lead.name is None
     assert lead.contact is None
+    assert conversation.closed
 
 
 async def test_when_ops_core_is_down_the_conversation_still_closes_and_the_log_has_no_personal_data(
