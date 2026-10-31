@@ -25,6 +25,7 @@ from src.app.contracts.pricing import PriceQuote
 from src.app.core.request_id import get_request_id
 from src.app.core.resilience import retry_async
 from src.app.core.settings.ops_core import OpsCoreSettings
+from src.app.core.url_redaction import strip_query_from_span
 from src.app.exceptions.lead import LeadNotSavedError
 from src.app.exceptions.pricing import (
     PricingError,
@@ -281,15 +282,22 @@ async def _inject_request_id(request: httpx.Request) -> None:
         request.headers["X-Request-ID"] = request_id
 
 
-def create_ops_core_gateway(settings: OpsCoreSettings) -> OpsCoreGateway:
-    """Factory: the one place the HTTP client for ops-core-api is built."""
+def create_ops_core_gateway(
+    settings: OpsCoreSettings, *, transport: httpx.AsyncBaseTransport | None = None
+) -> OpsCoreGateway:
+    """Factory: the one place the HTTP client for ops-core-api is built.
+
+    `transport` is for tests: it replaces the network, and the instrumentation still wraps it.
+    """
     client = httpx.AsyncClient(
         base_url=settings.base_url,
         timeout=settings.timeout_seconds,
         headers={"X-API-Key": settings.api_key.get_secret_value()},
         event_hooks={"request": [_inject_request_id]},
+        transport=transport,
     )
     # A span per attempt, and the `traceparent` that makes ops-core-api's server
     # span its child. The X-Request-ID hook stays: that is the id logs are joined on.
-    HTTPXClientInstrumentor().instrument_client(client)
+    # The span keeps the path but not the query: `?service=` is text from the conversation.
+    HTTPXClientInstrumentor().instrument_client(client, request_hook=strip_query_from_span)
     return OpsCoreGateway(settings, client)

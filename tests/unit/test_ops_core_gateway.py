@@ -22,7 +22,8 @@ from src.app.exceptions.pricing import (
     PricingUnavailableError,
     ServiceNotFoundError,
 )
-from src.app.gateways.ops_core import OpsCoreGateway, _inject_request_id
+from src.app.gateways.ops_core import OpsCoreGateway, _inject_request_id, create_ops_core_gateway
+from tests import telemetry
 from tests.fakes import logged_text
 
 _ATTEMPTS = 2
@@ -219,3 +220,16 @@ async def test_a_rejected_lead_is_not_retried_and_is_logged_by_code(caplog: pyte
 
     assert len(calls) == 1
     assert "invalid_api_key" in str([record.__dict__ for record in caplog.records])
+
+
+async def test_the_client_span_keeps_the_path_and_drops_the_query() -> None:
+    # `?service=` is text taken from the conversation; spans are retained and read by people.
+    settings = OpsCoreSettings(api_key=SecretStr("test-key-1234567890"), max_attempts=_ATTEMPTS)
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=_QUOTE_BODY))
+    telemetry.clear_spans()
+
+    await create_ops_core_gateway(settings, transport=transport).quote("Anna Petrova's massage", 3)
+
+    (span,) = [span for span in telemetry.finished_spans() if span.kind.name == "CLIENT"]
+    assert span.attributes is not None
+    assert span.attributes["url.full"] == f"{settings.base_url.rstrip('/')}/api/v1/pricing"
