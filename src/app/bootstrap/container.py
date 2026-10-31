@@ -8,7 +8,6 @@ layer above depends on the ports; only this file names the classes, so swapping
 any one of them is a change here and nowhere else.
 """
 
-import inspect
 from collections.abc import Mapping
 from functools import cached_property
 
@@ -51,8 +50,9 @@ class ApplicationContainer:
     def ops_core(self) -> OpsCoreGateway:
         return create_ops_core_gateway(get_ops_core_settings())
 
-    # One upstream, two ports: the stages ask for the narrow one they need, and
-    # close() releases the shared client once.
+    # One upstream, two ports: the stages ask for the narrow one they need. close()
+    # therefore reaches the shared gateway up to three times, which is harmless:
+    # httpx's aclose() does nothing on a client that is already closed.
     @cached_property
     def pricing_gateway(self) -> PricingGateway:
         return self.ops_core
@@ -96,7 +96,7 @@ class ApplicationContainer:
         )
 
     async def close(self) -> None:
-        """Close whatever was actually built, once each.
+        """Close whatever was actually built.
 
         Duck-typed rather than a registry of closers: a dependency that owns a
         resource (the httpx client, the LLM SDK client) already knows how to
@@ -104,13 +104,7 @@ class ApplicationContainer:
         update. The stages hold references to those same objects but have no
         close() of their own, so they are simply skipped.
         """
-        closed: set[int] = set()
         for dependency in tuple(self.__dict__.values()):
-            if id(dependency) in closed:
-                continue
             close = getattr(dependency, "close", None)
             if callable(close):
-                result = close()
-                if inspect.isawaitable(result):
-                    await result
-            closed.add(id(dependency))
+                await close()
