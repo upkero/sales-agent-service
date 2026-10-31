@@ -100,6 +100,14 @@ _QUOTE_BODY = {
 }
 
 
+async def test_the_catalogue_is_the_service_names_ops_core_lists() -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/pricing/services"
+        return httpx.Response(200, json={"items": [{"service_name": "Deep Tissue Massage", "unit_price": "120.00"}]})
+
+    assert await _gateway(httpx.MockTransport(respond)).list_services() == ["Deep Tissue Massage"]
+
+
 async def test_an_unmapped_rejection_is_a_502_that_does_not_echo_ops_core() -> None:
     # A wrong OPS_CORE_API_KEY: ops-core's 401 detail must not reach our caller,
     # who would read "invalid API key" as a problem with their own key.

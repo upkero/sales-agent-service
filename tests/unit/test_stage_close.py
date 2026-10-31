@@ -29,7 +29,6 @@ async def test_close_is_terminal(agent_settings: SalesAgentSettings) -> None:
 
     result = await stage.handle(conversation)
 
-    assert result.current_stage is SalesStage.CLOSE
     assert result.next_stage is SalesStage.CLOSE
 
 

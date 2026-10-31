@@ -16,7 +16,7 @@ from src.app.bootstrap.container import ApplicationContainer
 from src.app.contracts.lead import Lead
 from src.app.contracts.llm.llm_message import LLMMessage
 from src.app.contracts.llm.llm_response import LLMResponse
-from src.app.contracts.pricing import PriceQuote, PricingItem
+from src.app.contracts.pricing import PriceQuote
 from src.app.exceptions.lead import LeadNotSavedError
 from src.app.exceptions.pricing import PricingUnavailableError, ServiceNotFoundError
 from src.app.interfaces.lead_gateway import LeadGateway
@@ -76,9 +76,9 @@ class FakePricingGateway(PricingGateway):
         name, unit_price = self._lookup(service)
         return compute_quote(name, unit_price, quantity)
 
-    async def list_services(self) -> Sequence[PricingItem]:
+    async def list_services(self) -> Sequence[str]:
         self.calls.append(("list_services",))
-        return [PricingItem(service_name=name, unit_price=price) for name, price in self._catalogue.items()]
+        return list(self._catalogue)
 
     async def ping(self) -> bool:
         return True
@@ -96,7 +96,7 @@ class UnavailablePricingGateway(PricingGateway):
     async def quote(self, service: str, quantity: int) -> PriceQuote:
         raise PricingUnavailableError()
 
-    async def list_services(self) -> Sequence[PricingItem]:
+    async def list_services(self) -> Sequence[str]:
         raise PricingUnavailableError()
 
     async def ping(self) -> bool:

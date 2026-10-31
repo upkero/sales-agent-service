@@ -45,7 +45,7 @@ logger = getLogger(__name__)
 _tracer = trace.get_tracer(__name__)
 
 # The `data` fields of a stage that lets the prospect change their order.
-_ORDER_FIELDS = '"service": string|null, "quantity": integer|null'
+ORDER_FIELDS = '"service": string|null, "quantity": integer|null'
 
 # The prompt files are English; this is what the {reply_language} placeholder in
 # persona.md is filled with. The instruction is never translated — only the
@@ -134,7 +134,7 @@ class DialogueStage(ABC):
             await self.commit(conversation)
             next_stage = self.route(conversation, decision)
             span.set_attribute("sales.next_stage", next_stage.value)
-            return StageResult(reply=reply, current_stage=self.stage, next_stage=next_stage)
+            return StageResult(reply=reply, next_stage=next_stage)
 
     # ------------------------------------------------------------------ #
     # Overridable steps.
@@ -208,7 +208,7 @@ class DialogueStage(ABC):
     def _output_contract(self) -> str:
         # Padded here rather than in the template so a stage that wants no data
         # gets `"data": {}` and not `"data": {  }`.
-        spec = ", ".join(part for part in (self.data_spec(), _ORDER_FIELDS if self.takes_order_changes else "") if part)
+        spec = ", ".join(part for part in (self.data_spec(), ORDER_FIELDS if self.takes_order_changes else "") if part)
         return _OUTPUT_CONTRACT.render(data_fields=f" {spec} " if spec else "")
 
     def _prompt_ids(self) -> list[str]:
@@ -240,7 +240,6 @@ class DialogueStage(ABC):
             )
             return StageResult(
                 reply=get_message(conversation.language, "handoff"),
-                current_stage=self.stage,
                 next_stage=self.stage,
                 handoff=True,
             )
@@ -255,7 +254,6 @@ class DialogueStage(ABC):
         )
         return StageResult(
             reply=get_message(conversation.language, "clarifier"),
-            current_stage=self.stage,
             next_stage=self.stage,
         )
 

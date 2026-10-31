@@ -57,9 +57,7 @@ class PresentStage(DialogueStage):
             record_guardrail("unknown_service", self.stage.value)
             conversation.quote = None
             if not conversation.offered_services:
-                conversation.offered_services = tuple(
-                    item.service_name for item in await self._pricing.list_services()
-                )
+                conversation.offered_services = tuple(await self._pricing.list_services())
 
     def directive(self, conversation: Conversation) -> str:
         if conversation.quote is None:

@@ -11,7 +11,7 @@ from src.app.interfaces.pricing_gateway import PricingGateway
 from src.app.prompts import Prompt, get_prompt
 from src.app.services.dialog.decision import AgentDecision
 from src.app.services.dialog.extraction import canonical_service, coerce_quantity
-from src.app.services.dialog.stages.base import DialogueStage
+from src.app.services.dialog.stages.base import ORDER_FIELDS, DialogueStage
 
 logger = getLogger(__name__)
 
@@ -50,7 +50,7 @@ class QualifyStage(DialogueStage):
             logger.warning("Catalogue unavailable for grounding: %s", exc, extra={"conversation_id": conversation.id})
             record_guardrail("catalogue_unavailable", self.stage.value)
             return
-        conversation.offered_services = tuple(item.service_name for item in catalogue)
+        conversation.offered_services = tuple(catalogue)
 
     def directive(self, conversation: Conversation) -> str:
         # The trailing space joins each fragment to the sentence after it in stage_qualify.md.
@@ -62,7 +62,7 @@ class QualifyStage(DialogueStage):
         return _QUALIFY.render(catalogue=catalogue, known_slots=self._known_slots(conversation))
 
     def data_spec(self) -> str:
-        return '"service": string|null, "quantity": integer|null'
+        return ORDER_FIELDS
 
     def absorb(self, conversation: Conversation, decision: AgentDecision) -> None:
         service = decision.data.get("service")

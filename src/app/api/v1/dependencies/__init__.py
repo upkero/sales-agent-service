@@ -26,7 +26,6 @@ def get_pricing_gateway(request: Request) -> PricingGateway:
     return get_container(request).pricing_gateway
 
 
-ContainerDep = Annotated[ApplicationContainer, Depends(get_container)]
 SalesServiceDep = Annotated[SalesService, Depends(get_sales_service)]
 LLMClientDep = Annotated[LLMClient, Depends(get_llm_client)]
 PricingGatewayDep = Annotated[PricingGateway, Depends(get_pricing_gateway)]

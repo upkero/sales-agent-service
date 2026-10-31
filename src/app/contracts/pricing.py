@@ -13,13 +13,6 @@ from decimal import Decimal
 
 
 @dataclass(frozen=True, slots=True)
-class PricingItem:
-    service_name: str
-    unit_price: Decimal
-    description: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class PriceQuote:
     """The result of pricing a quantity of one service, discounts applied.
 

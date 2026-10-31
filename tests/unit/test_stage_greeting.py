@@ -13,7 +13,6 @@ async def test_greeting_replies_and_always_moves_to_qualify(agent_settings: Sale
 
     result = await stage.handle(conversation)
 
-    assert result.current_stage is SalesStage.GREETING
     assert result.next_stage is SalesStage.QUALIFY
     assert "Alex" in result.reply
     assert result.handoff is False

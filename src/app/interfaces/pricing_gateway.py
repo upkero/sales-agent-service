@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
-from src.app.contracts.pricing import PriceQuote, PricingItem
+from src.app.contracts.pricing import PriceQuote
 
 
 class PricingGateway(ABC):
@@ -24,8 +24,8 @@ class PricingGateway(ABC):
         """
 
     @abstractmethod
-    async def list_services(self) -> Sequence[PricingItem]:
-        """The sellable catalogue, used to ground the agent in real offerings and
+    async def list_services(self) -> Sequence[str]:
+        """The names of the sellable catalogue, used to ground the agent in real offerings and
         to recover when a prospect names a service that does not exist."""
 
     @abstractmethod

@@ -21,7 +21,7 @@ import httpx
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
 from src.app.contracts.lead import Lead
-from src.app.contracts.pricing import PriceQuote, PricingItem
+from src.app.contracts.pricing import PriceQuote
 from src.app.core.request_id import get_request_id
 from src.app.core.resilience import retry_async
 from src.app.core.settings.ops_core import OpsCoreSettings
@@ -120,13 +120,13 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
         )
         return self._to_quote(payload)
 
-    async def list_services(self) -> Sequence[PricingItem]:
+    async def list_services(self) -> Sequence[str]:
         payload = await self._send(
             "GET",
             "/api/v1/pricing/services",
             params={"limit": _CATALOGUE_PAGE_SIZE},
         )
-        return [self._to_item(item) for item in payload.get("items", [])]
+        return [str(item["service_name"]) for item in payload.get("items", [])]
 
     async def save_lead(self, lead: Lead) -> None:
         """Record the lead as a `lead` customer, its order and contact in the notes.
@@ -268,14 +268,6 @@ class OpsCoreGateway(PricingGateway, LeadGateway):
             discount_percent=Decimal(str(item["discount_percent"])),
             discount_amount=Decimal(str(item["discount_amount"])),
             total=Decimal(str(item["total"])),
-        )
-
-    @staticmethod
-    def _to_item(item: dict[str, Any]) -> PricingItem:
-        return PricingItem(
-            service_name=str(item["service_name"]),
-            unit_price=Decimal(str(item["unit_price"])),
-            description=item.get("description"),
         )
 
 

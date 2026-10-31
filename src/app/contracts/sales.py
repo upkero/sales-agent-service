@@ -40,15 +40,9 @@ ALLOWED_TRANSITIONS: dict[SalesStage, frozenset[SalesStage]] = {
 
 @dataclass(frozen=True, slots=True)
 class StageResult:
-    """What a stage hands back: what to say, and where the machine goes next.
-
-    `current_stage` is the stage that produced the reply; `next_stage` is where
-    the conversation will be on the following turn. They differ exactly when the
-    stage advanced.
-    """
+    """What a stage hands back: what to say, and where the conversation will be on the following turn."""
 
     reply: str
-    current_stage: SalesStage
     next_stage: SalesStage
     handoff: bool = False
 
